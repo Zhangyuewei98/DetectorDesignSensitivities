@@ -1,0 +1,8 @@
+#Don't save __pycache__
+__pycache__/
+
+#Don't save images
+*.jpg
+*.png
+*.eps
+*.svg
