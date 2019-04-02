@@ -30,6 +30,7 @@ __pycache__
 *.eps
 *.png
 *.pdf
+.ipynb_checkpoints
 
 
 # Logs and databases #
