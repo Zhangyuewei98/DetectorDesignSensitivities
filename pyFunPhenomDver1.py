@@ -7,23 +7,22 @@ import os, sys
 import struct
 import scipy.integrate as integrate
 
-def FunPhenomDver8(Vars,fitcoeffs,N):
+def FunPhenomDver8(Vars,fitcoeffs,N,f_low=1e-9,pct_of_peak=0.01):
     '''
-    Uses Mass Ratio (q <= 18), aligned snp.pins (|a/m|~0.85 or when q=1 |a/m|<0.98),
+    Uses Mass Ratio (q <= 18), aligned spins (|a/m|~0.85 or when q=1 |a/m|<0.98),
     fitting coefficients for QNM type, and sampling rate
-    Returns the frequency, the Phenom amplitude of the insnp.piral-merger-ringdown
+    Returns the frequency, the Phenom amplitude of the inspiral-merger-ringdown
     Uses methods found in arXiv:1508.07253 and arXiv:1508.07250
     ###############################################
     '''
-
-    [_,q,x1,x2,_] = np.split(Vars,len(Vars))
+    [_,q,x1,x2,_] = Vars
     #M = m1+m2 #Total Mass
     #q = m2/m1 #Mass Ratio: Paper tested up to 18
     #eta = m1*m2/M**2 
     eta = q/(q+1)**2  #reduced mass: Paper tested up to 0.05 (q=18)
     x_PN = chiPN(eta,x1,x2) #PN reduced spin parameter
-    a_f = a_final(x1,x2,q,eta) #dimensionless snp.pin
-    f_low = 1e-9 #Starting frequency of waveform (should pick better value?)
+    a_f = a_final(x1,x2,q,eta) #dimensionless spin
+    #f_low = 1e-9 #Starting frequency of waveform (should pick better value?)
 
     ##################
     #Finds f_ringdown and f_damp from fit taken from  	arXiv:gr-qc/0512160
@@ -52,7 +51,7 @@ def FunPhenomDver8(Vars,fitcoeffs,N):
     f3 = f_peak
     f2 = (f1+f3)/2
 
-    cutoffFreq = FindcutoffFreq(f_RD,f_damp,[Gamma1,Gamma2,Gamma3])
+    cutoffFreq = FindcutoffFreq(f_RD,f_damp,[Gamma1,Gamma2,Gamma3],pct_of_peak=pct_of_peak)
 
     #If lowest frequency is lower than cutoffFreq, throw error
     assert (f_low <= cutoffFreq),"Error. \nLower frequency bound must be lower than  of merger ringdown." 
@@ -78,7 +77,7 @@ def FunPhenomDver8(Vars,fitcoeffs,N):
     tmpinspiral = A_norm(Mf[0:indxf1+1],eta)*A_insp(Mf[0:indxf1+1],eta,x1,x2,x_PN)
     tmpintermediate = A_norm(Mf[indxf1+1:indxfpeak],eta)*A_int(Mf[indxf1+1:indxfpeak],Del_solns)
     tmpmergerringdown = A_norm(Mf[indxfpeak:],eta)*A_MR(Mf[indxfpeak:],f_RD,f_damp,[Gamma1,Gamma2,Gamma3])
-    fullwaveform = np.vstack((tmpinspiral,tmpintermediate,tmpmergerringdown))
+    fullwaveform = np.hstack((tmpinspiral,tmpintermediate,tmpmergerringdown))
 
     return [Mf,fullwaveform]
 
@@ -231,11 +230,11 @@ def fpeakCalc(f_RD,f_damp,Gammas):
     return f_max
 
 
-def FindcutoffFreq(f_RD,f_damp,Gammas):
+def FindcutoffFreq(f_RD,f_damp,Gammas,pct_of_peak=0.0001):
     ##############################
     #Cutoff signal when the amplitude is a factor of 10 below the value at f_RD
     tempfreqs = np.logspace(np.log10(f_RD),np.log10(10*f_RD),100)
-    cutoffAmp = .0001*A_MR(f_RD,f_RD,f_damp,[Gammas[0],Gammas[1],Gammas[2]])
+    cutoffAmp = pct_of_peak*A_MR(f_RD,f_RD,f_damp,[Gammas[0],Gammas[1],Gammas[2]])
     merger_ringdown_Amp = A_MR(tempfreqs,f_RD,f_damp,[Gammas[0],Gammas[1],Gammas[2]])
     cutoffindex = np.argmin(np.abs(cutoffAmp-merger_ringdown_Amp))
     return tempfreqs[cutoffindex]
@@ -259,41 +258,3 @@ def chiPN(eta,x1,x2):
     chi_s = (x1+x2)/2.0
     chi_a = (x1-x2)/2.0
     return chi_s*(1.0-eta*76.0/113.0) + delta*chi_a
-'''
-##################################################3
-#testing functions
-
-def ztoD(z):
-    c  = 2.9979e8          #[m/s]
-    Ho = 67.74                #Hubble's constant, [km/s/Mpc]
-    omegaM = 0.3089         #WMAP 7 maximum likelihood values
-    omegaL = 0.6911
-    omegak = 1-omegaM-omegaL
-    invEz = lambda x: 1./np.sqrt(omegaM*(1+x)**3+omegak*(1+x)**2+omegaL)   #x=z
-
-    result,error = integrate.quad(invEz,0,z)
-    return (1+z)*(c/1e6)/Ho*result
-
-def main():
-    current_path = os.path.dirname(os.path.abspath(__file__))
-    splt_path = current_path.split("/")
-    top_path_idx = splt_path.index('lisaparameterization')
-    top_directory = "/".join(splt_path[0:top_path_idx+1])
-
-    fit_coeffs_filedirectory = top_directory + '/CommonLoadFiles/PhenomDFiles/'
-
-    #From PhenomD we must use matlab code because I am lazy
-    Vars = np.array([1e6,18.0,0.0,0.0,3.0])
-    nfreqs = 1000
-    [M,q,chi1,chi2,z] = np.split(Vars,len(Vars))
-    DL = ztoD(z)
-    #eng = matlab.engine.start_matlab()
-    #eng.addpath(phenomD_filedirectory)
-
-    fit_coeffs_filename = 'fitcoeffsWEB.dat'
-    fit_coeffs_file = fit_coeffs_filedirectory + fit_coeffs_filename
-    fitcoeffs = np.loadtxt(fit_coeffs_file) #load QNM fitting files for speed later
-
-    [phenomD_f,phenomD_h] = FunPhenomDver8(Vars,fitcoeffs,nfreqs)
-
-main()'''

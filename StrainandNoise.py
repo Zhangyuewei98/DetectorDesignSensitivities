@@ -59,7 +59,7 @@ def approxResponseFunction(f,L):
     R_f = 3/10/(1+0.6*(f/f_L)**2) 
     return R_f
 
-def Get_TransferFunction(L,f_low=1e-5*u.Hz,f_high=1.0*u.Hz):
+def Get_TransferFunction(L=2.5*u.Gm.to('m')*u.m,f_low=1e-5*u.Hz,f_high=1.0*u.Hz):
     LISA_Transfer_Function_filedirectory = os.getcwd() + '/LoadFiles/LISATransferFunction/'
     LISA_Transfer_Function_filename = 'transfer.dat' #np.loadtxting transfer function for Lisa noise curve
     LISA_Transfer_Function_filelocation = LISA_Transfer_Function_filedirectory + LISA_Transfer_Function_filename
@@ -107,25 +107,12 @@ def Sgal4yr(f):
     return A*np.exp(-(f.value**a)+(b*f.value*np.sin(k*f.value)))*(f.value**(-7/3))*(1 + np.tanh(g*(f_k-f.value))) #White Dwarf Background Noise
 
 def Get_CharStrain(Vars,f,h):
-    [M,q,chi1,chi2,z] = np.split(Vars,len(Vars))
-    DL = cosmo.luminosity_distance(z)
-    
-    m_conv = const.G*const.M_sun/const.c**3 #Converts M = [M] to M = [sec]
-
-    eta = q/(1+q)**2
-    M_redshifted_time = M*(1+z)*m_conv
-    M_chirp = eta**(3/5)*M_redshifted_time
-    
-    freq_conv = 1/M_redshifted_time
-    strain_conv = np.sqrt(5/16/np.pi)*(const.c/DL.to('m'))*M_redshifted_time**2
-    
-    f = f*freq_conv
-    h = h*strain_conv
+    [f,h] = StrainConv(Vars,f,h)
     h_char = np.sqrt(4*f**2*h**2)
-    return [f,h_char]
+    return f,h_char
 
 def Get_MonoStrain(Vars,fT,f_init,T_obs):
-    [M,q,_,_,z] = np.split(Vars,len(Vars))
+    [M,q,_,_,z] = Vars
     DL = cosmo.luminosity_distance(z)
     DL = DL.to('m')
 
@@ -143,7 +130,7 @@ def Get_MonoStrain(Vars,fT,f_init,T_obs):
     return [indxfgw,h_gw]
 
 def StrainConv(Vars,f,h):
-    [M,q,_,_,z] = np.split(Vars,len(Vars))
+    [M,q,_,_,z] = Vars
     DL = cosmo.luminosity_distance(z)
     DL = DL.to('m')
 
@@ -152,19 +139,18 @@ def StrainConv(Vars,f,h):
     
     freq_conv = 1/M_redshifted_time
     strain_conv = np.sqrt(5/16/np.pi)*(const.c/DL)*M_redshifted_time**2
-    #print(strain_conv)
     
     f = f*freq_conv
     h = h*strain_conv
 
     return [f,h]
 
-def Get_Waveform(Vars,nfreqs=int(1e3)):
+def Get_Waveform(Vars,nfreqs=int(1e3),f_low=1e-9):
     fit_coeffs_filedirectory = os.getcwd() + '/LoadFiles/PhenomDFiles/'
     fit_coeffs_filename = 'fitcoeffsWEB.dat'
     fit_coeffs_file = fit_coeffs_filedirectory + fit_coeffs_filename
     fitcoeffs = np.loadtxt(fit_coeffs_file) #load QNM fitting files for speed later
 
-    [phenomD_f,phenomD_h] = PhenomD.FunPhenomDver8(Vars,fitcoeffs,nfreqs)
+    [phenomD_f,phenomD_h] = PhenomD.FunPhenomDver8(Vars,fitcoeffs,nfreqs,f_low=f_low)
     return [phenomD_f,phenomD_h]
 
