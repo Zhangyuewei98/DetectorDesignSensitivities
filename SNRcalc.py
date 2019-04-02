@@ -62,20 +62,7 @@ def checkFreqEvol(var_dict,T_obs,f_init):
     else:
         return f_T_obs, False
 
-
-# ## getSNRMatrixVer8
-# Mixed initial observing frequencies and time from merger
-
-
-def getSNRMatrixVer9(var1,sampleRate1,var2,sampleRate2,var_dict,fT,S_n_f_sqrt,T_obs):
-    recalculate = False #Assume we only need to calculate the waveform once
-    
-    initVars = []
-    for name in var_dict.keys():
-        initVars.append(var_dict[name]['val'])
-
-    [phenomD_f,phenomD_h] = SnN.Get_Waveform(initVars)
-    
+def getSNRMatrixVer10(var1,sampleRate1,var2,sampleRate2,var_dict,fT,S_n_f_sqrt,T_obs):
     f_opt = fT[np.argmin(S_n_f_sqrt)]
 
     if var1 == 'q' or var1 == 'chi1' or var1 == 'chi2':
@@ -104,66 +91,73 @@ def getSNRMatrixVer9(var1,sampleRate1,var2,sampleRate2,var_dict,fT,S_n_f_sqrt,T_
             var_dict[var2]['val'] = sample2[j]
             #if ismono f_init=f_opt, else f_init=f_T_obs
             f_init, ismono = checkFreqEvol(var_dict,T_obs,f_opt)
-            SNRMatrix[i,j] = calcSNRVer11(var_dict,phenomD_f,phenomD_h,fT,S_n_f_sqrt,T_obs,f_init,recalculate,ismono)
+            if ismono:
+                recalculate = False #Assume we only need to calculate the waveform once
+                initVars = []
+                for name in var_dict.keys():
+                    initVars.append(var_dict[name]['val'])
+                [phenomD_f,phenomD_h] = SnN.Get_Waveform(initVars)
+                SNRMatrix[i,j] = calcMonoSNR(var_dict,fT,S_n_f_sqrt,T_obs,f_init)
+            else:
+                SNRMatrix[i,j] = calcChirpSNR(var_dict,phenomD_f,phenomD_h,fT,S_n_f_sqrt,T_obs,f_init,recalculate)
     return [sample1,sample2,SNRMatrix]
-
 
 # # Calculation of SNR
 # Attempts to replicate FuturePTA calculation with monochromatic vs
 # chirping, but something is wrong
 
-# # calcSNRver11
-
-
-def calcSNRVer11(var_dict,phenomD_f,phenomD_h,fT,S_n_f_sqrt,T_obs,f_init,recalculate,ismono):    
+def calcMonoSNR(var_dict,fT,S_n_f_sqrt,T_obs,f_init):
     Vars = []
     for name,sub_dict in var_dict.items():
         Vars.append(var_dict[name]['val'])
 
     S_n_f = S_n_f_sqrt**2 #Amplitude Spectral Density
-    
-    if ismono:
-        indxfgw,h_gw = SnN.Get_MonoStrain(Vars,fT,f_init,T_obs)
-        #CALCULATE SNR
-        SNR = np.sqrt(h_gw**2/S_n_f[indxfgw])
-    else:
-        #Source is either evolving during the observation (f_T_obs-f_obs)>(1/T_obs),
-        #or Completely Merges during the observation,
-        #or already merged (Tobs > tinit => imaginary f_T_obs)  
-        if recalculate:
-            [phenomD_f,phenomD_h] = SnN.Get_Waveform(Vars)
-        
-        phenomD_f,phenomD_h = SnN.StrainConv(Vars,phenomD_f,phenomD_h)
-        #Only want to integrate from observed frequency till merger
-        indxfgw = np.abs(phenomD_f-f_init).argmin()
-        if indxfgw >= len(phenomD_f)-1:
-            #If the SMBH has already merged set the SNR to ~0
-            return 1e-30  
-        else:
-            f_cut = phenomD_f[indxfgw:]
-            h_cut = phenomD_h[indxfgw:]
-
-        #################################
-        #Interpolate the Strain Noise Spectral Density to only the frequencies the
-        #strain runs over
-        #Set Noise to 1e30 outside of signal frequencies
-        S_n_f_interp_old = interp.interp1d(np.log10(fT.value),np.log10(S_n_f.value),kind='cubic',fill_value=30.0, bounds_error=False) 
-        S_n_f_interp_new = S_n_f_interp_old(np.log10(f_cut.value))
-        S_n_f_interp = 10**S_n_f_interp_new
-
-        #CALCULATE SNR FOR BOTH NOISE CURVES
-        denom = S_n_f_interp #Sky Averaged Noise Spectral Density
-        numer = f_cut*h_cut**2
-
-        integral_consts = 16/5 # 4 or(4*4/5) from sky/inclination/polarization averaging
-
-        integrand = numer/denom
-        SNRsqrd = integral_consts*np.trapz(integrand.value,np.log(f_cut.value),axis=0) #SNR**2
-        SNR = np.sqrt(SNRsqrd)
+    indxfgw,h_gw = SnN.Get_MonoStrain(Vars,fT,f_init,T_obs)
+    #CALCULATE SNR
+    SNR = np.sqrt(h_gw**2/S_n_f[indxfgw])
     return SNR
 
+def calcChirpSNR(var_dict,phenomD_f,phenomD_h,fT,S_n_f_sqrt,T_obs,f_init,recalculate):
+    #Source is either evolving during the observation (f_T_obs-f_obs)>(1/T_obs),
+    #or Completely Merges during the observation,
+    #or already merged (Tobs > tinit => imaginary f_T_obs)  
+    Vars = []
+    for name,sub_dict in var_dict.items():
+        Vars.append(var_dict[name]['val'])
 
-# # Plot SNR
+    S_n_f = S_n_f_sqrt**2 #Amplitude Spectral Density
+
+    if recalculate:
+        [phenomD_f,phenomD_h] = SnN.Get_Waveform(Vars)
+    
+    phenomD_f,phenomD_h = SnN.StrainConv(Vars,phenomD_f,phenomD_h)
+    #Only want to integrate from observed frequency till merger
+    indxfgw = np.abs(phenomD_f-f_init).argmin()
+    if indxfgw >= len(phenomD_f)-1:
+        #If the SMBH has already merged set the SNR to ~0
+        return 1e-30  
+    else:
+        f_cut = phenomD_f[indxfgw:]
+        h_cut = phenomD_h[indxfgw:]
+
+    #################################
+    #Interpolate the Strain Noise Spectral Density to only the frequencies the
+    #strain runs over
+    #Set Noise to 1e30 outside of signal frequencies
+    S_n_f_interp_old = interp.interp1d(np.log10(fT.value),np.log10(S_n_f.value),kind='cubic',fill_value=30.0, bounds_error=False) 
+    S_n_f_interp_new = S_n_f_interp_old(np.log10(f_cut.value))
+    S_n_f_interp = 10**S_n_f_interp_new
+
+    #CALCULATE SNR FOR BOTH NOISE CURVES
+    denom = S_n_f_interp #Sky Averaged Noise Spectral Density
+    numer = f_cut*h_cut**2
+
+    integral_consts = 16/5 # 4 or(4*4/5) from sky/inclination/polarization averaging
+
+    integrand = numer/denom
+    SNRsqrd = integral_consts*np.trapz(integrand.value,np.log(f_cut.value),axis=0) #SNR**2
+    SNR = np.sqrt(SNRsqrd)
+    return SNR
 
 
 def plotSNR(sample1,sample2,SNRMatrix,var_dict,var1,var2):
