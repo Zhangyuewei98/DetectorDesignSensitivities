@@ -7,7 +7,7 @@ import os, sys
 import struct
 import scipy.integrate as integrate
 
-def FunPhenomDver8(Vars,fitcoeffs,N,f_low=1e-9,pct_of_peak=0.01):
+def FunPhenomD(Vars,fitcoeffs,N,f_low=1e-9,pct_of_peak=0.01):
     '''
     Uses Mass Ratio (q <= 18), aligned spins (|a/m|~0.85 or when q=1 |a/m|<0.98),
     fitting coefficients for QNM type, and sampling rate

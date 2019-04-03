@@ -5,7 +5,7 @@ import astropy.units as u
 from astropy.cosmology import z_at_value
 from astropy.cosmology import WMAP9 as cosmo
 
-import pyFunPhenomDver1 as PhenomD
+import IMRPhenomD as PhenomD
 
 def calcPTAASD(sigma_rms,cadence,T_obs,ndetectors,nfreqs=int(1e3),A_stoch_back = 4e-16):
     #####################################################
@@ -111,7 +111,7 @@ def Get_CharStrain(Vars,f,h):
     h_char = np.sqrt(4*f**2*h**2)
     return f,h_char
 
-def Get_MonoStrain(Vars,fT,f_init,T_obs):
+def Get_MonoStrain(Vars,T_obs,f_init,fT):
     [M,q,_,_,z] = Vars
     DL = cosmo.luminosity_distance(z)
     DL = DL.to('m')
@@ -151,6 +151,6 @@ def Get_Waveform(Vars,nfreqs=int(1e3),f_low=1e-9):
     fit_coeffs_file = fit_coeffs_filedirectory + fit_coeffs_filename
     fitcoeffs = np.loadtxt(fit_coeffs_file) #load QNM fitting files for speed later
 
-    [phenomD_f,phenomD_h] = PhenomD.FunPhenomDver8(Vars,fitcoeffs,nfreqs,f_low=f_low)
+    [phenomD_f,phenomD_h] = PhenomD.FunPhenomD(Vars,fitcoeffs,nfreqs,f_low=f_low)
     return [phenomD_f,phenomD_h]
 

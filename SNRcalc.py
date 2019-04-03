@@ -16,15 +16,6 @@ from fractions import Fraction
 
 import StrainandNoise as SnN
 
-# Adding Astropy units
-
-# # Setting Up SNR Calculation
-# Uses the index given and the data range to sample the space either logrithmically or linearly based on the 
-# selection of variables. Then it computes the SNR for each value.
-# Returns the variable ranges used to calculate the SNR for each matrix, then returns the SNRs with size of the sample1Xsample2
-# 
-
-# # Check frequency evolution
 
 def checkFreqEvol(var_dict,T_obs,f_init):
     #####################################
@@ -52,7 +43,7 @@ def checkFreqEvol(var_dict,T_obs,f_init):
     M_redshifted_time = M*(1+z)*m_conv
     M_chirp = eta**(3/5)*M_redshifted_time
     
-    #f(t) from eqn 24 of Cornish et. al 2018 https://arxiv.org/pdf/1803.01944.pdf
+    #f(t) from eqn 24 of Robson,Cornish,and Liu 2018 https://arxiv.org/abs/1803.01944
     t_init = 5*(M_chirp)**(-5/3)*(8*np.pi*f_init)**(-8/3)
     f_evolve = 1./8./np.pi/M_chirp*(5*M_chirp/(t_init-T_obs))**(3./8.)
     f_T_obs = 1./8./np.pi/M_chirp*(5*M_chirp/(T_obs))**(3./8.)
@@ -62,65 +53,72 @@ def checkFreqEvol(var_dict,T_obs,f_init):
     else:
         return f_T_obs, False
 
-def getSNRMatrixVer10(var1,sampleRate1,var2,sampleRate2,var_dict,fT,S_n_f_sqrt,T_obs):
+def getSNRMatrix(var_dict,fT,S_n_f_sqrt,T_obs,var_x,sampleRate_x,var_y,sampleRate_y):
+    # # Setting Up SNR Calculation
+    # Uses the variable given and the data range to sample the space either logrithmically or linearly based on the 
+    # selection of variables. Then it computes the SNR for each value.
+    # Returns the variable ranges used to calculate the SNR for each matrix, then returns the SNRs with size of the sample_yXsample_x
+    # 
     f_opt = fT[np.argmin(S_n_f_sqrt)]
 
-    if var1 == 'q' or var1 == 'chi1' or var1 == 'chi2':
+    if var_y == 'q' or var_y == 'chi1' or var_y == 'chi2':
         #Sample in linear space for mass ratio and spins
-        sample1 = np.linspace(var_dict[var1]['min'],var_dict[var1]['max'],sampleRate1)
+        sample_y = np.linspace(var_dict[var_y]['min'],var_dict[var_y]['max'],sampleRate_y)
         recalculate = True #Must recalculate the waveform at each point
     else:
         #Sample in log space for any other variables
-        sample1 = np.logspace(np.log10(var_dict[var1]['min']),np.log10(var_dict[var1]['max']),sampleRate1)
+        sample_y = np.logspace(np.log10(var_dict[var_y]['min']),np.log10(var_dict[var_y]['max']),sampleRate_y)
 
-    if var2 == 'q' or var2 == 'chi1' or var2 == 'chi2':
+    if var_x == 'q' or var_x == 'chi1' or var_x == 'chi2':
         #Sample in linear space for mass ratio and spins
-        sample2 = np.linspace(var_dict[var2]['min'],var_dict[var2]['max'],sampleRate2)
+        sample_x = np.linspace(var_dict[var_x]['min'],var_dict[var_x]['max'],sampleRate_x)
         recalculate = True #Must recalculate the waveform at each point
     else:
         #Sample in log space for any other variables
-        sample2 = np.logspace(np.log10(var_dict[var2]['min']),np.log10(var_dict[var2]['max']),sampleRate2)
+        sample_x = np.logspace(np.log10(var_dict[var_x]['min']),np.log10(var_dict[var_x]['max']),sampleRate_x)
 
-    sampleSize1 = len(sample1)
-    sampleSize2 = len(sample2)
-    SNRMatrix = np.zeros((sampleSize1,sampleSize2))
+    sampleSize_x = len(sample_x)
+    sampleSize_y = len(sample_y)
+    SNRMatrix = np.zeros((sampleSize_x,sampleSize_y))
     
-    for i in range(sampleSize1):
-        for j in range(sampleSize2):
-            var_dict[var1]['val'] = sample1[i]
-            var_dict[var2]['val'] = sample2[j]
+    for i in range(sampleSize_x):
+        for j in range(sampleSize_y):
+            var_dict[var_x]['val'] = sample_x[i]
+            var_dict[var_y]['val'] = sample_y[j]
             #if ismono f_init=f_opt, else f_init=f_T_obs
             f_init, ismono = checkFreqEvol(var_dict,T_obs,f_opt)
             if ismono:
+                SNRMatrix[j,i] = calcMonoSNR(var_dict,fT,S_n_f_sqrt,T_obs,f_init)
+            else:
                 recalculate = False #Assume we only need to calculate the waveform once
                 initVars = []
                 for name in var_dict.keys():
                     initVars.append(var_dict[name]['val'])
                 [phenomD_f,phenomD_h] = SnN.Get_Waveform(initVars)
-                SNRMatrix[i,j] = calcMonoSNR(var_dict,fT,S_n_f_sqrt,T_obs,f_init)
-            else:
-                SNRMatrix[i,j] = calcChirpSNR(var_dict,phenomD_f,phenomD_h,fT,S_n_f_sqrt,T_obs,f_init,recalculate)
-    return [sample1,sample2,SNRMatrix]
+                SNRMatrix[j,i] = calcChirpSNR(var_dict,fT,S_n_f_sqrt,T_obs,f_init,phenomD_f,phenomD_h,recalculate)
+    return [sample_x,sample_y,SNRMatrix]
 
-# # Calculation of SNR
-# Attempts to replicate FuturePTA calculation with monochromatic vs
-# chirping, but something is wrong
 
 def calcMonoSNR(var_dict,fT,S_n_f_sqrt,T_obs,f_init):
+    #Calculation of monochromatic source strain
+    #See ~pg. 9 in Robson,Cornish,and Liu 2018 https://arxiv.org/abs/1803.01944
     Vars = []
     for name,sub_dict in var_dict.items():
         Vars.append(var_dict[name]['val'])
 
     S_n_f = S_n_f_sqrt**2 #Amplitude Spectral Density
-    indxfgw,h_gw = SnN.Get_MonoStrain(Vars,fT,f_init,T_obs)
+    indxfgw,h_gw = SnN.Get_MonoStrain(Vars,T_obs,f_init,fT)
     #CALCULATE SNR
+    #Eqn. 26
     SNR = np.sqrt(h_gw**2/S_n_f[indxfgw])
     return SNR
 
-def calcChirpSNR(var_dict,phenomD_f,phenomD_h,fT,S_n_f_sqrt,T_obs,f_init,recalculate):
-    #Source is either evolving during the observation (f_T_obs-f_obs)>(1/T_obs),
-    #or Completely Merges during the observation,
-    #or already merged (Tobs > tinit => imaginary f_T_obs)  
+def calcChirpSNR(var_dict,fT,S_n_f_sqrt,T_obs,f_init,phenomD_f,phenomD_h,recalculate):
+    #Calculates evolving source using non-precessing binary black hole waveform model IMRPhenomD
+    #See Husa et al. 2016 (https://arxiv.org/abs/1508.07250) and Khan et al. 2016 (https://arxiv.org/abs/1508.07253)
+    #Uses an interpolated method to align waveform and instrument noise, then integrates 
+    # over the overlapping region. See eqn 18 from Robson,Cornish,and Liu 2018 https://arxiv.org/abs/1803.01944
+    # Values outside of the sensitivity curve are arbitrarily set to 1e30 so the SNR is effectively 0
     Vars = []
     for name,sub_dict in var_dict.items():
         Vars.append(var_dict[name]['val'])
@@ -131,7 +129,7 @@ def calcChirpSNR(var_dict,phenomD_f,phenomD_h,fT,S_n_f_sqrt,T_obs,f_init,recalcu
         [phenomD_f,phenomD_h] = SnN.Get_Waveform(Vars)
     
     phenomD_f,phenomD_h = SnN.StrainConv(Vars,phenomD_f,phenomD_h)
-    #Only want to integrate from observed frequency till merger
+    #Only want to integrate from observed frequency (f(T_obs_before_merger)) till merger
     indxfgw = np.abs(phenomD_f-f_init).argmin()
     if indxfgw >= len(phenomD_f)-1:
         #If the SMBH has already merged set the SNR to ~0
@@ -160,7 +158,7 @@ def calcChirpSNR(var_dict,phenomD_f,phenomD_h,fT,S_n_f_sqrt,T_obs,f_init,recalcu
     return SNR
 
 
-def plotSNR(sample1,sample2,SNRMatrix,var_dict,var1,var2):
+def plotSNR(var_dict,var_x,sample_x,var_y,sample_y,SNRMatrix):
     '''Plots the SNR contours from calcSNR'''
     #Selects contour levels to separate sections into
     contLevels = np.array([5,10, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7])
@@ -179,18 +177,18 @@ def plotSNR(sample1,sample2,SNRMatrix,var_dict,var1,var2):
     colormap = 'viridis'
     logLevels = np.log10(contLevels)
     logSNR = np.log10(SNRMatrix)
-    xlabel_min = var_dict[var2]['min']
-    xlabel_max = var_dict[var2]['max']
-    ylabel_min = var_dict[var1]['min']
-    ylabel_max = var_dict[var1]['max']
+    xlabel_min = var_dict[var_x]['min']
+    xlabel_max = var_dict[var_x]['max']
+    ylabel_min = var_dict[var_y]['min']
+    ylabel_max = var_dict[var_y]['max']
 
     #########################
     #Make the Contour Plots
     fig1, ax1 = plt.subplots(figsize=figsize)
 
     #Set axis scales based on what data sampling we used 
-    if (var1 == 'q' or var1 == 'chi1' or var1 == 'chi2') and (var2 != 'q' and var2 != 'chi1' and var2 != 'chi2'):
-        CS1 = ax1.contourf(np.log10(sample2),sample1,logSNR,logLevels,cmap = colormap)
+    if (var_y == 'q' or var_y == 'chi1' or var_y == 'chi2') and (var_x != 'q' and var_x != 'chi1' and var_x != 'chi2'):
+        CS1 = ax1.contourf(np.log10(sample_x),sample_y,logSNR,logLevels,cmap = colormap)
         ax1.set_xlim(np.log10(xlabel_min),np.log10(xlabel_max))
         ax1.set_ylim(ylabel_min,ylabel_max)
         x_labels = np.logspace(np.log10(xlabel_min),np.log10(xlabel_max),np.log10(xlabel_max)-np.log10(xlabel_min)+1)
@@ -199,8 +197,8 @@ def plotSNR(sample1,sample2,SNRMatrix,var_dict,var1,var2):
         ax1.set_yticklabels(y_labels,fontsize = axissize)
         ax1.set_xticks(np.log10(x_labels))
         ax1.set_xticklabels(np.log10(x_labels),fontsize = axissize)
-    elif (var1 != 'q' or var1 != 'chi1'  or var1 != 'chi2' ) and (var2 == 'q' and var2 == 'chi1' and var2 == 'chi2'):
-        CS1 = ax1.contourf(sample2,np.log10(sample1),logSNR,logLevels,cmap = colormap)
+    elif (var_y != 'q' or var_y != 'chi1'  or var_y != 'chi2' ) and (var_x == 'q' and var_x == 'chi1' and var_x == 'chi2'):
+        CS1 = ax1.contourf(sample_x,np.log10(sample_y),logSNR,logLevels,cmap = colormap)
         ax1.set_xlim(xlabel_min,xlabel_max)
         ax1.set_ylim(np.log10(ylabel_min),np.log10(ylabel_max))
         x_labels = np.range(xlabel_min,xlabel_max,1)
@@ -209,8 +207,8 @@ def plotSNR(sample1,sample2,SNRMatrix,var_dict,var1,var2):
         ax1.set_xticklabels(x_labels,fontsize = axissize)
         ax1.set_yticks(np.log10(y_labels))
         ax1.set_yticklabels(np.log10(y_labels),fontsize = axissize)
-    elif (var1 != 'q' or var1 != 'chi1' or var1 != 'chi2') and (var2 != 'q' and var2 != 'chi1' and var2 != 'chi2'):
-        CS1 = ax1.contourf(np.log10(sample2),np.log10(sample1),logSNR,logLevels,cmap = colormap)
+    elif (var_y != 'q' or var_y != 'chi1' or var_y != 'chi2') and (var_x != 'q' and var_x != 'chi1' and var_x != 'chi2'):
+        CS1 = ax1.contourf(np.log10(sample_x),np.log10(sample_y),logSNR,logLevels,cmap = colormap)
         ax1.set_xlim(np.log10(xlabel_min),np.log10(xlabel_max))
         ax1.set_ylim(np.log10(ylabel_min),np.log10(ylabel_max))
         x_labels = np.logspace(np.log10(xlabel_min),np.log10(xlabel_max),np.log10(xlabel_max)-np.log10(xlabel_min)+1)
@@ -231,3 +229,8 @@ def plotSNR(sample1,sample2,SNRMatrix,var_dict,var1,var2):
 
     plt.show()
 
+def saveSNR(sample_x,sample_y,SNRMatrix,save_location,SNR_filename,sample_filename):
+    #Save SNR Matrix
+    np.savetxt(save_location+SNR_filename,SNRMatrix)
+    #Save Samples
+    np.savetxt(save_location+sample_filename,[sample_x,sample_y])
