@@ -55,7 +55,7 @@ def CalcPTAstrain(sigma_rms,cadence,T_obs,N_p,nfreqs=int(1e3)):
     # Taken from Moore,Taylor, and Gair 2014 https://arxiv.org/abs/1406.5199
     #f = np.logspace(np.log10(1/T_obs.value),np.log10(cadence.value/2),nfreqs)*u.Hz
     f = np.logspace(np.log10(1/T_obs.value),np.log10(cadence.value),nfreqs)*u.Hz
-    SNR = 5 # Value of 3 is Used in paper
+    SNR = 3 # Value of 3 is Used in paper
     chi_corr = 1/np.sqrt(3) #Sky averaged geometric factor eqn. 11
     overlap_freq = 2/T_obs
 
@@ -82,7 +82,12 @@ def approxResponseFunction(f,L):
     return R_f
 
 def Get_TransferFunction(L=2.5*u.Gm.to('m')*u.m,f_low=1e-5*u.Hz,f_high=1.0*u.Hz):
-    LISA_Transfer_Function_filedirectory = os.getcwd() + '/LoadFiles/LISATransferFunction/'
+    current_path = os.getcwd()
+    splt_path = current_path.split("/")
+    top_path_idx = splt_path.index('DetectorDesignSensitivities')
+    top_directory = "/".join(splt_path[0:top_path_idx+1])
+
+    LISA_Transfer_Function_filedirectory = top_directory + '/LoadFiles/LISATransferFunction/'
     LISA_Transfer_Function_filename = 'transfer.dat' #np.loadtxting transfer function for Lisa noise curve
     LISA_Transfer_Function_filelocation = LISA_Transfer_Function_filedirectory + LISA_Transfer_Function_filename
     LISA_Transfer_Function_data = np.loadtxt(LISA_Transfer_Function_filelocation)
