@@ -7,6 +7,11 @@ from astropy.cosmology import WMAP9 as cosmo
 
 import IMRPhenomD as PhenomD
 
+current_path = os.getcwd()
+splt_path = current_path.split("/")
+top_path_idx = splt_path.index('DetectorDesignSensitivities')
+top_directory = "/".join(splt_path[0:top_path_idx+1])
+
 def calcPTAASD(sigma_rms,cadence,T_obs,ndetectors,nfreqs=int(1e3),A_stoch_back = 4e-16):
     
     #frequency range of full PTA
@@ -54,7 +59,7 @@ def calcPTAASD(sigma_rms,cadence,T_obs,ndetectors,nfreqs=int(1e3),A_stoch_back =
 def CalcPTAstrain(sigma_rms,cadence,T_obs,N_p,nfreqs=int(1e3)):
     # Taken from Moore,Taylor, and Gair 2014 https://arxiv.org/abs/1406.5199
     #f = np.logspace(np.log10(1/T_obs.value),np.log10(cadence.value/2),nfreqs)*u.Hz
-    f = np.logspace(np.log10(1/T_obs.value),np.log10(cadence.value),nfreqs)*u.Hz
+    f = np.arange(-10,-6,1/T_obs.value)*u.Hz
     SNR = 3 # Value of 3 is Used in paper
     chi_corr = 1/np.sqrt(3) #Sky averaged geometric factor eqn. 11
     overlap_freq = 2/T_obs
@@ -63,6 +68,9 @@ def CalcPTAstrain(sigma_rms,cadence,T_obs,N_p,nfreqs=int(1e3)):
     h_c_low_factor = 3*np.sqrt(SNR)/(2**(7/4)*chi_corr*np.pi**3)*(13/N_p/(N_p-1))**(1/4)*sigma_rms*np.sqrt(1/T_obs/cadence)*T_obs**(-3)
 
     phi = np.arccos(h_c_low_factor/h_c_high_factor*overlap_freq**(-3))
+
+    print(h_c_high_factor*overlap_freq)
+    print(h_c_low_factor*overlap_freq**-2*(1/np.cos(phi)))
 
     h_c_high = h_c_high_factor*f
     h_c_low = h_c_low_factor*f**(-2)*(1/np.cos(phi))
@@ -82,11 +90,6 @@ def approxResponseFunction(f,L):
     return R_f
 
 def Get_TransferFunction(L=2.5*u.Gm.to('m')*u.m,f_low=1e-5*u.Hz,f_high=1.0*u.Hz):
-    current_path = os.getcwd()
-    splt_path = current_path.split("/")
-    top_path_idx = splt_path.index('DetectorDesignSensitivities')
-    top_directory = "/".join(splt_path[0:top_path_idx+1])
-
     LISA_Transfer_Function_filedirectory = top_directory + '/LoadFiles/LISATransferFunction/'
     LISA_Transfer_Function_filename = 'transfer.dat' #np.loadtxting transfer function for Lisa noise curve
     LISA_Transfer_Function_filelocation = LISA_Transfer_Function_filedirectory + LISA_Transfer_Function_filename
@@ -173,7 +176,7 @@ def StrainConv(Vars,f,h):
     return [f,h]
 
 def Get_Waveform(Vars,nfreqs=int(1e3),f_low=1e-9):
-    fit_coeffs_filedirectory = os.getcwd() + '/LoadFiles/PhenomDFiles/'
+    fit_coeffs_filedirectory = top_directory + '/LoadFiles/PhenomDFiles/'
     fit_coeffs_filename = 'fitcoeffsWEB.dat'
     fit_coeffs_file = fit_coeffs_filedirectory + fit_coeffs_filename
     fitcoeffs = np.loadtxt(fit_coeffs_file) #load QNM fitting files for speed later
