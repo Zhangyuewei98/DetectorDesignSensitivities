@@ -56,21 +56,67 @@ def calcPTAASD(sigma_rms,cadence,T_obs,ndetectors,nfreqs=int(1e3),A_stoch_back =
     ASD = np.sqrt((12*np.pi**2)*f**2*P_n)
     return f,ASD
 
-def CalcPTAstrain(sigma_rms,cadence,T_obs,N_p,nfreqs=int(1e3)):
+def CalcPTAASD_v2(sigma_rms,cadence,T_obs,ndetectors,N_p,nfreqs=int(1e3),A_stoch_back = 4e-16):
+    [f,h_c] = CalcPTAstrain(sigma_rms,cadence,T_obs,ndetectors,N_p,nfreqs=nfreqs)
+    #from Jenet et al. 2006 https://arxiv.org/abs/astro-ph/0609013
+    P_w = h_c**2/12/np.pi**2*f**(-3)
+
+    #Paragraph below eqn 4 from Lam,M.T. 2018 https://arxiv.org/abs/1808.10071
+    #P_red = A_red.*(f./f_year).**(-gamma) # red noise for some pulsar
+    P_red = 0.0*u.s*u.s/u.Hz #Assume no pulsar red noise for simplicity
+    
+    #eqn 42 of T&R 2013 https://arxiv.org/abs/1310.5300
+    #h_inst = np.sqrt((12*np.pi**2*(P_w+P_red))*f**3)
+    ##################################################
+    #Stochastic background amplitude from Sesana et al. 2016 https://arxiv.org/pdf/1603.09348.pdf
+    f_year = 1/u.yr
+    P_sb = (A_stoch_back**2/12/np.pi**2)*f**(-3)*(f/f_year.to('Hz'))**(-4/3)
+    #h_sb = A_stoch_back*(f/f_year)**(-2/3)
+
+    ####################################################
+    #PSD of the full PTA from Lam,M.T. 2018 https://arxiv.org/abs/1808.10071
+    P_n = P_w + P_red + P_sb
+    
+    #####################################################
+    #PSD of a PTA taken from eqn 40 of Thrane & Romano 2013 https://arxiv.org/abs/1310.5300
+
+    #strain of the full PTA
+    #h_f = np.sqrt((12*np.pi**2)*f**3*P_n)
+    ASD = np.sqrt((12*np.pi**2)*f**2*P_n)
+
+    return f,ASD
+
+
+def CalcPTAstrain(sigma_rms,cadence,T_obs,ndetectors,N_p,nfreqs=int(1e3)):
     # Taken from Moore,Taylor, and Gair 2014 https://arxiv.org/abs/1406.5199
-    #f = np.logspace(np.log10(1/T_obs.value),np.log10(cadence.value/2),nfreqs)*u.Hz
-    f = np.arange(-10,-6,1/T_obs.value)*u.Hz
+
+    #Equation 5 from Lam,M.T. 2018 https://arxiv.org/abs/1808.10071
+    if ndetectors == 1:
+        T_obs_tot = T_obs
+        P_w = 2*sigma_rms**2/cadence #Avg white noise from pulsar array [s**2/Hz]
+        f = np.logspace(np.log10(1/T_obs.value),np.log10(cadence.value/2),nfreqs)*u.Hz
+    else:
+        P_w_tot = 0
+        T_obs_tot = 0
+        #Sum of pulsar noises in different time periods divided by total time
+        for i in range(ndetectors):
+            P_w_n = sigma_rms[i]**2*(T_obs[i]/cadence[i]) #Avg white noise from pulsar arrays [s**2/Hz]
+            P_w_tot += P_w_n
+            T_obs_tot += T_obs[i]
+        P_w = 2*P_w_tot/T_obs_tot
+        #frequency sampled from 1/observation time to nyquist frequency (c/2)
+        f = np.logspace(np.log10(1/T_obs_tot.value),np.log10(min(cadence).value/2),nfreqs)*u.Hz
+
     SNR = 3 # Value of 3 is Used in paper
     chi_corr = 1/np.sqrt(3) #Sky averaged geometric factor eqn. 11
-    overlap_freq = 2/T_obs
+    overlap_freq = 2/T_obs_tot
 
-    h_c_high_factor = (16*SNR**2/(3*chi_corr**4*N_p*(N_p-1)))**(1/4)*sigma_rms*np.sqrt(1/T_obs/cadence)
-    h_c_low_factor = 3*np.sqrt(SNR)/(2**(7/4)*chi_corr*np.pi**3)*(13/N_p/(N_p-1))**(1/4)*sigma_rms*np.sqrt(1/T_obs/cadence)*T_obs**(-3)
+    #h_c_high_factor = (16*SNR**2/(3*chi_corr**4*N_p*(N_p-1)))**(1/4)*sigma_rms*np.sqrt(1/T_obs_tot/cadence)
+    #h_c_low_factor = 3*np.sqrt(SNR)/(2**(7/4)*chi_corr*np.pi**3)*(13/N_p/(N_p-1))**(1/4)*sigma_rms*np.sqrt(1/T_obs_tot/cadence)*T_obs_tot**(-3)
+    h_c_high_factor = (16*SNR**2/(3*chi_corr**4*N_p*(N_p-1)))**(1/4)*np.sqrt(P_w/2/T_obs_tot)
+    h_c_low_factor = 3*np.sqrt(SNR)/(2**(7/4)*chi_corr*np.pi**3)*(13/N_p/(N_p-1))**(1/4)*np.sqrt(P_w/2/T_obs_tot)*T_obs_tot**(-3)
 
     phi = np.arccos(h_c_low_factor/h_c_high_factor*overlap_freq**(-3))
-
-    print(h_c_high_factor*overlap_freq)
-    print(h_c_low_factor*overlap_freq**-2*(1/np.cos(phi)))
 
     h_c_high = h_c_high_factor*f
     h_c_low = h_c_low_factor*f**(-2)*(1/np.cos(phi))
