@@ -12,7 +12,7 @@ splt_path = current_path.split("/")
 top_path_idx = splt_path.index('DetectorDesignSensitivities')
 top_directory = "/".join(splt_path[0:top_path_idx+1])
 
-def calcPTAASD(sigma_rms,cadence,T_obs,ndetectors,nfreqs=int(1e3),A_stoch_back = 4e-16):
+def calcPTAASD(sigma_rms,cadence,T_obs,ndetectors,N_p,nfreqs=int(1e3),A_stoch_back = 4e-16):
     
     #frequency range of full PTA
     f_year = 1/u.yr
@@ -21,12 +21,12 @@ def calcPTAASD(sigma_rms,cadence,T_obs,ndetectors,nfreqs=int(1e3),A_stoch_back =
 
     #Equation 5 from Lam,M.T. 2018 https://arxiv.org/abs/1808.10071
     if ndetectors == 1:
-        P_w = 2*sigma_rms**2/cadence #Avg white noise from pulsar array [s**2/Hz]
+        P_w = 2*sigma_rms**2/cadence/N_p/(N_p-1) #Avg white noise from pulsar array [s**2/Hz]
         f = np.logspace(np.log10(1/T_obs.value),np.log10(cadence.value/2),nfreqs)*u.Hz
     else:
         #Sum of pulsar noises in different time periods divided by total time
         for i in range(ndetectors):
-            P_w_n = sigma_rms[i]**2*(T_obs[i]/cadence[i]) #Avg white noise from pulsar arrays [s**2/Hz]
+            P_w_n = sigma_rms[i]**2*(T_obs[i]/cadence[i])/N_p[i]/(N_p[i]-1) #Avg white noise from pulsar arrays [s**2/Hz]
             P_w_tot += P_w_n
             T_obs_tot += T_obs[i]
         P_w = 2*P_w_tot/T_obs_tot

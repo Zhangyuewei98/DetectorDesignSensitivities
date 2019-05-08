@@ -226,6 +226,7 @@ def plotSNR(var_dict,var_x,sample_x,var_y,sample_y,SNRMatrix):
     cbar1 = fig1.colorbar(CS1)
     cbar1.set_label(r'${\rm log}(SNR)$',fontsize = labelsize)
     cbar1.ax.tick_params(labelsize = axissize)
+    cbar1.ax.set_yticklabels([r'$10^{%i}$' %x for x in logLevels])
 
     plt.show()
 
