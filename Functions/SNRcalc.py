@@ -162,6 +162,7 @@ def plotSNR(var_dict,var_x,sample_x,var_y,sample_y,SNRMatrix):
     '''Plots the SNR contours from calcSNR'''
     #Selects contour levels to separate sections into
     contLevels = np.array([5,10, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7])
+    logLevels = np.log10(contLevels)
     axissize = 14
     labelsize = 16
     textsize = 11
@@ -175,7 +176,6 @@ def plotSNR(var_dict,var_x,sample_x,var_y,sample_y,SNRMatrix):
     transparencyFuture = 1.0
     colornorm = colors.Normalize(vmin=0.0, vmax=5.0)
     colormap = 'viridis'
-    logLevels = np.log10(contLevels)
     logSNR = np.log10(SNRMatrix)
     xlabel_min = var_dict[var_x]['min']
     xlabel_max = var_dict[var_x]['max']
@@ -224,9 +224,9 @@ def plotSNR(var_dict,var_x,sample_x,var_y,sample_y,SNRMatrix):
     #########################
     #Make colorbar
     cbar1 = fig1.colorbar(CS1)
-    cbar1.set_label(r'${\rm log}(SNR)$',fontsize = labelsize)
+    cbar1.set_label(r'$SNR$',fontsize = labelsize)
     cbar1.ax.tick_params(labelsize = axissize)
-    cbar1.ax.set_yticklabels([r'$10^{%i}$' %x for x in logLevels])
+    cbar1.ax.set_yticklabels([r'$10^{%i}$' %x if int(x) > 1 else r'$%i$' %(10**x) for x in logLevels])
 
     plt.show()
 
