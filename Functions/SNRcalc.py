@@ -184,49 +184,51 @@ def plotSNR(var_dict,var_x,sample_x,var_y,sample_y,SNRMatrix):
 
     #########################
     #Make the Contour Plots
-    fig1, ax1 = plt.subplots(figsize=figsize)
+    fig, ax = plt.subplots(figsize=figsize)
 
     #Set axis scales based on what data sampling we used 
     if (var_y == 'q' or var_y == 'chi1' or var_y == 'chi2') and (var_x != 'q' and var_x != 'chi1' and var_x != 'chi2'):
-        CS1 = ax1.contourf(np.log10(sample_x),sample_y,logSNR,logLevels,cmap = colormap)
-        ax1.set_xlim(np.log10(xlabel_min),np.log10(xlabel_max))
-        ax1.set_ylim(ylabel_min,ylabel_max)
+        CS1 = ax.contourf(np.log10(sample_x),sample_y,logSNR,logLevels,cmap = colormap)
+        ax.set_xlim(np.log10(xlabel_min),np.log10(xlabel_max))
+        ax.set_ylim(ylabel_min,ylabel_max)
         x_labels = np.logspace(np.log10(xlabel_min),np.log10(xlabel_max),np.log10(xlabel_max)-np.log10(xlabel_min)+1)
         y_labels = np.range(ylabel_min,ylabel_max,1)
-        ax1.set_yticks(y_labels)
-        ax1.set_yticklabels(y_labels,fontsize = axissize)
-        ax1.set_xticks(np.log10(x_labels))
-        ax1.set_xticklabels(np.log10(x_labels),fontsize = axissize)
+        ax.set_yticks(y_labels)
+        ax.set_yticklabels(y_labels,fontsize = axissize)
+        ax.set_xticks(np.log10(x_labels))
+        ax.set_xticklabels(np.log10(x_labels),fontsize = axissize)
     elif (var_y != 'q' or var_y != 'chi1'  or var_y != 'chi2' ) and (var_x == 'q' and var_x == 'chi1' and var_x == 'chi2'):
-        CS1 = ax1.contourf(sample_x,np.log10(sample_y),logSNR,logLevels,cmap = colormap)
-        ax1.set_xlim(xlabel_min,xlabel_max)
-        ax1.set_ylim(np.log10(ylabel_min),np.log10(ylabel_max))
+        CS1 = ax.contourf(sample_x,np.log10(sample_y),logSNR,logLevels,cmap = colormap)
+        ax.set_xlim(xlabel_min,xlabel_max)
+        ax.set_ylim(np.log10(ylabel_min),np.log10(ylabel_max))
         x_labels = np.range(xlabel_min,xlabel_max,1)
         y_labels = np.logspace(np.log10(ylabel_min),np.log10(ylabel_max),np.log10(ylabel_max)-np.log10(ylabel_min)+1)
-        ax1.set_xticks(x_labels)
-        ax1.set_xticklabels(x_labels,fontsize = axissize)
-        ax1.set_yticks(np.log10(y_labels))
-        ax1.set_yticklabels(np.log10(y_labels),fontsize = axissize)
+        ax.set_xticks(x_labels)
+        ax.set_xticklabels(x_labels,fontsize = axissize)
+        ax.set_yticks(np.log10(y_labels))
+        ax.set_yticklabels(np.log10(y_labels),fontsize = axissize)
     elif (var_y != 'q' or var_y != 'chi1' or var_y != 'chi2') and (var_x != 'q' and var_x != 'chi1' and var_x != 'chi2'):
-        CS1 = ax1.contourf(np.log10(sample_x),np.log10(sample_y),logSNR,logLevels,cmap = colormap)
-        ax1.set_xlim(np.log10(xlabel_min),np.log10(xlabel_max))
-        ax1.set_ylim(np.log10(ylabel_min),np.log10(ylabel_max))
+        CS1 = ax.contourf(np.log10(sample_x),np.log10(sample_y),logSNR,logLevels,cmap = colormap)
+        ax.set_xlim(np.log10(xlabel_min),np.log10(xlabel_max))
+        ax.set_ylim(np.log10(ylabel_min),np.log10(ylabel_max))
         x_labels = np.logspace(np.log10(xlabel_min),np.log10(xlabel_max),np.log10(xlabel_max)-np.log10(xlabel_min)+1)
         y_labels = np.logspace(np.log10(ylabel_min),np.log10(ylabel_max),np.log10(ylabel_max)-np.log10(ylabel_min)+1)
-        ax1.set_yticks(np.log10(y_labels))
-        ax1.set_yticklabels(np.log10(y_labels),fontsize = axissize)
-        ax1.set_xticks(np.log10(x_labels))
-        ax1.set_xticklabels(np.log10(x_labels),fontsize = axissize)
+        ax.set_yticks(np.log10(y_labels))
+        ax.set_xticks(np.log10(x_labels))
+        ax.set_yticklabels([x if int(x) < 1 else int(x) for x in y_labels],\
+            fontsize = axissize)
+        ax.set_xticklabels([r'$10^{%i}$' %x if int(x) > 1 else r'$%i$' %(10**x) for x in np.log10(x_labels)],\
+            fontsize = axissize)
 
-    ax1.set_xlabel(r'${\rm log}(M_{\rm tot})$ $[M_{\odot}]$',fontsize = labelsize)
-    ax1.set_ylabel(r'${\rm log}(z)$',fontsize = labelsize)
-    ax1.yaxis.set_label_coords(-.10,.5)
+    ax.set_xlabel(r'$M_{\rm tot}$ $[M_{\odot}]$',fontsize = labelsize)
+    ax.set_ylabel(r'${\rm Redshift}$',fontsize = labelsize)
+    ax.yaxis.set_label_coords(-.10,.5)
     #########################
     #Make colorbar
-    cbar1 = fig1.colorbar(CS1)
-    cbar1.set_label(r'$SNR$',fontsize = labelsize)
-    cbar1.ax.tick_params(labelsize = axissize)
-    cbar1.ax.set_yticklabels([r'$10^{%i}$' %x if int(x) > 1 else r'$%i$' %(10**x) for x in logLevels])
+    cbar = fig.colorbar(CS1)
+    cbar.set_label(r'$SNR$',fontsize = labelsize)
+    cbar.ax.tick_params(labelsize = axissize)
+    cbar.ax.set_yticklabels([r'$10^{%i}$' %x if int(x) > 1 else r'$%i$' %(10**x) for x in logLevels])
 
     plt.show()
 
