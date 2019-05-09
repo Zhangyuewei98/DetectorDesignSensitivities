@@ -98,6 +98,28 @@ def getSNRMatrix(var_dict,fT,S_n_f_sqrt,T_obs,var_x,sampleRate_x,var_y,sampleRat
                 SNRMatrix[j,i] = calcChirpSNR(var_dict,fT,S_n_f_sqrt,T_obs,f_init,phenomD_f,phenomD_h,recalculate)
     return [sample_x,sample_y,SNRMatrix]
 
+def calcPTASNR(var_dict,fT,S_n_f_sqrt,T_obs,f_init):
+    Vars = []
+    for name,sub_dict in var_dict.items():
+        Vars.append(var_dict[name]['val'])
+
+    S_n_f = S_n_f_sqrt**2 #Amplitude Spectral Density
+
+    chi_corr = 1/np.sqrt(3) #Sky averaged geometric factor eqn. 11
+
+    SNR_scale = .5*N_p*(N_P-1)*8*chi_corr**4/T_obs
+    if mono:
+        denom = fT**4*S_n_f**2 #Sky Averaged Noise Spectral Density
+        delta_approx = np.sin(np.pi*(fT-f_init)*T_obs)/np.pi/(fT-f_init)
+        numer = delta_approx**4*h_char**4
+
+        integrand = numer/denom
+        SNRsqrd = SNR_scale*np.trapz(integrand.value,np.log(fT.value),axis=0) #SNR**2
+        SNR = np.sqrt(SNRsqrd)
+        return SNR
+    elif chirp:
+        
+    SNR = SNR_scale
 
 def calcMonoSNR(var_dict,fT,S_n_f_sqrt,T_obs,f_init):
     #Calculation of monochromatic source strain

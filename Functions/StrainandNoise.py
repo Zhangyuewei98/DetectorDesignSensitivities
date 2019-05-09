@@ -47,9 +47,6 @@ def calcPTAASD(sigma_rms,cadence,T_obs,ndetectors,N_p,nfreqs=int(1e3),A_stoch_ba
     ####################################################
     #PSD of the full PTA from Lam,M.T. 2018 https://arxiv.org/abs/1808.10071
     P_n = P_w + P_red + P_sb
-    
-    #####################################################
-    #PSD of a PTA taken from eqn 40 of Thrane & Romano 2013 https://arxiv.org/abs/1310.5300
 
     #strain of the full PTA
     #h_f = np.sqrt((12*np.pi**2)*f**3*P_n)
