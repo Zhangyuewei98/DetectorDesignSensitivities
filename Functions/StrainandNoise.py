@@ -57,7 +57,7 @@ def calcPTAASD(sigma_rms,cadence,T_obs,ndetectors,N_p,nfreqs=int(1e3),A_stoch_ba
     return f,ASD
 
 def calcPTAASD_v2(sigma_rms,cadence,T_obs,ndetectors,N_p,nfreqs=int(1e3),A_stoch_back = 4e-16):
-    [f,h_c] = CalcPTAstrain(sigma_rms,cadence,T_obs,ndetectors,N_p,nfreqs=nfreqs)
+    [f,h_c] = calcPTAstrain(sigma_rms,cadence,T_obs,ndetectors,N_p,nfreqs=nfreqs)
     #from Jenet et al. 2006 https://arxiv.org/abs/astro-ph/0609013
     P_w = h_c**2/12/np.pi**2*f**(-3)
 
@@ -87,7 +87,7 @@ def calcPTAASD_v2(sigma_rms,cadence,T_obs,ndetectors,N_p,nfreqs=int(1e3),A_stoch
     return f,ASD
 
 
-def CalcPTAstrain(sigma_rms,cadence,T_obs,ndetectors,N_p,nfreqs=int(1e3)):
+def calcPTAstrain(sigma_rms,cadence,T_obs,ndetectors,N_p,nfreqs=int(1e3)):
     # Taken from Moore,Taylor, and Gair 2014 https://arxiv.org/abs/1406.5199
 
     #Equation 5 from Lam,M.T. 2018 https://arxiv.org/abs/1808.10071
