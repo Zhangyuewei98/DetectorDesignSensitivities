@@ -274,7 +274,7 @@ def Get_MonoStrain(Vars,T_obs,f_init,fT):
     h_gw = 8/np.sqrt(5)*np.sqrt(T_obs)*(const.c/DL)*(np.pi*fT[indxfgw])**(2./3.)*M_chirp**(5./3.)
     return [indxfgw,h_gw]
 
-def Get_PTAMonoStrain(Vars,f_init):
+def Get_PTAMonoStrain(Vars,T_obs,f_init,fT):
     [M,q,_,_,z] = Vars
     DL = cosmo.luminosity_distance(z)
     DL = DL.to('m')
@@ -285,16 +285,17 @@ def Get_PTAMonoStrain(Vars,f_init):
     M_redshifted_time = M*(1+z)*m_conv
     M_chirp = eta**(3/5)*M_redshifted_time
     #Source is emitting at one frequency (monochromatic)
-
+    #strain of instrument at f_cw
+    indxfgw = np.abs(fT-f_init).argmin()
     #Strain from Rosado, Sesana, and Gair (2015) https://arxiv.org/abs/1503.04803
     #(ie. sky and inclination averaged)
-    inc = np.pi #optimally oriented
+    inc = 0 #optimally oriented
     a = 1+np.cos(inc)**2
     b = -2*np.cos(inc)
-    A = 2*(const.c/DL)*(np.pi*f_init)**(2./3.)*M_chirp**(5./3.)
+    A = 2*(const.c/DL)*(np.pi*fT[indxfgw])**(2./3.)*M_chirp**(5./3.)
     h_gw = A*np.sqrt(.5*(a**2+b**2))
 
-    return h_gw
+    return [indxfgw,h_gw]
 
 def StrainConv(Vars,f,h):
     [M,q,_,_,z] = Vars

@@ -80,7 +80,7 @@ def getSNRMatrix(source_var_dict,inst_var_dict,fT,S_n_f_sqrt,T_obs,var_x,sampleR
     sampleSize_x = len(sample_x)
     sampleSize_y = len(sample_y)
     SNRMatrix = np.zeros((sampleSize_x,sampleSize_y))
-    tmpSNRMatrix=SNRMatrix
+    tmpSNRMatrix=np.zeros((sampleSize_x,sampleSize_y))
     
     for i in range(sampleSize_x):
         for j in range(sampleSize_y):
@@ -116,32 +116,17 @@ def calcPTAMonoSNR(source_var_dict,inst_var_dict,f_init):
 
     [T_obs,N_p,sigma_rms,cadence] = inst_vars
 
-    h_char = SnN.Get_PTAMonoStrain(source_vars,f_init)
-    #print('h_char = ',h_char)
+    f, PSD = SnN.calcPTAPSD(inst_var_dict,A_stoch_back=0.0)
 
-    f, PSD = SnN.calcPTAPSD(inst_var_dict)
+    indxfgw,h_char = SnN.Get_PTAMonoStrain(source_vars,T_obs,f_init,f)
 
     chi_corr = 1/np.sqrt(3) #Sky averaged geometric factor eqn. 11
 
     SNR_scale = .5*N_p*(N_p-1)*8*chi_corr**4*h_char**4/T_obs
 
-    #print('SNR_scale = ',SNR_scale)
+    #delta_approx = np.sin(np.pi*(f-f_init).value*T_obs.value)/np.pi/((f-f_init).value)
 
-    denom = f**4*PSD**2 #Sky Averaged Noise Spectral Density
-
-    #print('denom = ',denom[0])
-
-    delta_approx = np.sin(np.pi*(f-f_init).value*T_obs.value)/np.pi/((f-f_init).value)
-
-    numer = SNR_scale*delta_approx
-
-    #print('numer = ',numer[0])
-
-    integrand = numer/denom
-
-    #print('integrand = ',integrand[0])
-
-    SNRsqrd = np.trapz(integrand.value,f.value,axis=0) #SNR**2
+    SNRsqrd = SNR_scale/f[indxfgw]**5/PSD[indxfgw]**2 #SNR**2
     SNR = np.sqrt(SNRsqrd)
     return SNR
 
