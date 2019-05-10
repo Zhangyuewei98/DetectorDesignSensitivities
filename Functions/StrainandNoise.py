@@ -83,6 +83,78 @@ def calcPTAASD_v2(sigma_rms,cadence,T_obs,ndetectors,N_p,nfreqs=int(1e3),A_stoch
 
     return f,ASD
 
+def calcPTAASD_v3(inst_var_dict,nfreqs=int(1e3),A_stoch_back = 4e-16):
+    inst_vars = []
+    for name,sub_dict in inst_var_dict.items():
+        inst_vars.append(inst_var_dict[name]['val'])
+
+    [T_obs,N_p,sigma_rms,cadence] = inst_vars
+    
+    #frequency range of full PTA
+    f_year = 1/u.yr
+    P_w_tot = 0
+    T_obs_tot = 0
+
+    #Equation 5 from Lam,M.T. 2018 https://arxiv.org/abs/1808.10071
+    P_w = 2*sigma_rms**2/cadence/N_p/(N_p-1) #Avg white noise from pulsar array [s**2/Hz]
+    f = np.logspace(np.log10(1/T_obs.value),np.log10(cadence.value/2),nfreqs)*u.Hz
+    
+    #Paragraph below eqn 4 from Lam,M.T. 2018 https://arxiv.org/abs/1808.10071
+    #P_red = A_red.*(f./f_year).**(-gamma) # red noise for some pulsar
+    P_red = 0.0*u.s*u.s/u.Hz #Assume no pulsar red noise for simplicity
+    
+    #eqn 42 of T&R 2013 https://arxiv.org/abs/1310.5300
+    #h_inst = np.sqrt((12*np.pi**2*(P_w+P_red))*f**3)
+    ##################################################
+    #Stochastic background amplitude from Sesana et al. 2016 https://arxiv.org/pdf/1603.09348.pdf
+    P_sb = (A_stoch_back**2/12/np.pi**2)*f**(-3)*(f/f_year.to('Hz'))**(-4/3)
+    #h_sb = A_stoch_back*(f/f_year)**(-2/3)
+
+    ####################################################
+    #PSD of the full PTA from Lam,M.T. 2018 https://arxiv.org/abs/1808.10071
+    P_n = P_w + P_red + P_sb
+
+    #strain of the full PTA
+    #h_f = np.sqrt((12*np.pi**2)*f**3*P_n)
+    ASD = np.sqrt((12*np.pi**2)*f**2*P_n)
+    return f,ASD
+
+def calcPTAPSD(inst_var_dict,nfreqs=int(1e3),A_stoch_back = 4e-16):
+    inst_vars = []
+    for name,sub_dict in inst_var_dict.items():
+        inst_vars.append(inst_var_dict[name]['val'])
+
+    [T_obs,_,sigma_rms,cadence] = inst_vars
+    
+    #frequency range of full PTA
+    f_year = 1/u.yr
+    P_w_tot = 0
+    T_obs_tot = 0
+
+    #Equation 5 from Lam,M.T. 2018 https://arxiv.org/abs/1808.10071
+    P_w = 2*sigma_rms**2/cadence #Avg white noise from pulsar array [s**2/Hz]
+    f = np.logspace(np.log10(1/T_obs.value),np.log10(cadence.value/2),nfreqs)*u.Hz
+    
+    #Paragraph below eqn 4 from Lam,M.T. 2018 https://arxiv.org/abs/1808.10071
+    #P_red = A_red.*(f./f_year).**(-gamma) # red noise for some pulsar
+    P_red = 0.0*u.s*u.s/u.Hz #Assume no pulsar red noise for simplicity
+    
+    #eqn 42 of T&R 2013 https://arxiv.org/abs/1310.5300
+    #h_inst = np.sqrt((12*np.pi**2*(P_w+P_red))*f**3)
+    ##################################################
+    #Stochastic background amplitude from Sesana et al. 2016 https://arxiv.org/pdf/1603.09348.pdf
+    P_sb = (A_stoch_back**2/12/np.pi**2)*f**(-3)*(f/f_year.to('Hz'))**(-4/3)
+    #h_sb = A_stoch_back*(f/f_year)**(-2/3)
+
+    ####################################################
+    #PSD of the full PTA from Lam,M.T. 2018 https://arxiv.org/abs/1808.10071
+    PSD = P_w + P_red + P_sb
+
+    #strain of the full PTA
+    #h_f = np.sqrt((12*np.pi**2)*f**3*P_n)
+    #ASD = np.sqrt((12*np.pi**2)*f**2*P_n)
+    return f,PSD
+
 
 def calcPTAstrain(sigma_rms,cadence,T_obs,ndetectors,N_p,nfreqs=int(1e3)):
     # Taken from Moore,Taylor, and Gair 2014 https://arxiv.org/abs/1406.5199
@@ -147,7 +219,7 @@ def Get_TransferFunction(L=2.5*u.Gm.to('m')*u.m,f_low=1e-5*u.Hz,f_high=1.0*u.Hz)
     LISA_Transfer_Function_f = LISA_Transfer_Function_f[idx_f_5:idx_f_1]
     return [LISA_Transfer_Function_f,LISA_Transfer_Function]
 
-def NeilSensitivity(f,T,S_acc=3e-15*u.m/u.s/u.s,S_oms=1.5e-11*u.m,L=2.5e9*u.m):   
+def NeilSensitivity(f,T,S_acc=3e-15*u.m/u.s/u.s,S_oms=1.5e-11*u.m,L=2.5e9*u.m):
     #Uses Calculation described by Neil Cornish (unpublished)
     f_L = const.c/2/np.pi/L #Transfer frequency
     P_acc = (S_acc)**2*(1+(0.4e-3*u.Hz/f)**2)*(1+(f/(8e-3*u.Hz))**4) #acceleration noise [Hz]**-1
@@ -201,6 +273,28 @@ def Get_MonoStrain(Vars,T_obs,f_init,fT):
     #(ie. optimally oriented)
     h_gw = 8/np.sqrt(5)*np.sqrt(T_obs)*(const.c/DL)*(np.pi*fT[indxfgw])**(2./3.)*M_chirp**(5./3.)
     return [indxfgw,h_gw]
+
+def Get_PTAMonoStrain(Vars,f_init):
+    [M,q,_,_,z] = Vars
+    DL = cosmo.luminosity_distance(z)
+    DL = DL.to('m')
+
+    m_conv = const.G*const.M_sun/const.c**3 #Converts M = [M] to M = [sec]
+
+    eta = q/(1+q)**2
+    M_redshifted_time = M*(1+z)*m_conv
+    M_chirp = eta**(3/5)*M_redshifted_time
+    #Source is emitting at one frequency (monochromatic)
+
+    #Strain from Rosado, Sesana, and Gair (2015) https://arxiv.org/abs/1503.04803
+    #(ie. sky and inclination averaged)
+    inc = np.pi #optimally oriented
+    a = 1+np.cos(inc)**2
+    b = -2*np.cos(inc)
+    A = 2*(const.c/DL)*(np.pi*f_init)**(2./3.)*M_chirp**(5./3.)
+    h_gw = A*np.sqrt(.5*(a**2+b**2))
+
+    return h_gw
 
 def StrainConv(Vars,f,h):
     [M,q,_,_,z] = Vars
