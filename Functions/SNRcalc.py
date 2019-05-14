@@ -100,8 +100,9 @@ def getSNRMatrix(source_var_dict,inst_var_dict,fT,S_n_f_sqrt,T_obs,var_x,sampleR
                     initVars.append(source_var_dict[name]['val'])
                 [phenomD_f,phenomD_h] = SnN.Get_Waveform(initVars)
                 SNRMatrix[j,i] = calcChirpSNR(source_var_dict,fT,S_n_f_sqrt,T_obs,f_init,phenomD_f,phenomD_h,recalculate)
-            tmpSNRMatrix[j,i] = calcPTAMonoSNR(source_var_dict,inst_var_dict,f_init)
-    return [sample_x,sample_y,SNRMatrix,tmpSNRMatrix]
+            #tmpSNRMatrix[j,i] = calcPTAMonoSNR(source_var_dict,inst_var_dict,f_init)
+    #return [sample_x,sample_y,SNRMatrix,tmpSNRMatrix]
+    return [sample_x,sample_y,SNRMatrix]
 
 def calcPTAMonoSNR(source_var_dict,inst_var_dict,f_init):
     #SNR for a monochromatic source in a PTA
