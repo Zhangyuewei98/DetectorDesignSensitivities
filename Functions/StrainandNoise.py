@@ -12,46 +12,6 @@ splt_path = current_path.split("/")
 top_path_idx = splt_path.index('DetectorDesignSensitivities')
 top_directory = "/".join(splt_path[0:top_path_idx+1])
 
-def calcPTAASD(sigma_rms,cadence,T_obs,ndetectors,N_p,nfreqs=int(1e3),A_stoch_back = 4e-16):
-    
-    #frequency range of full PTA
-    f_year = 1/u.yr
-    P_w_tot = 0
-    T_obs_tot = 0
-
-    #Equation 5 from Lam,M.T. 2018 https://arxiv.org/abs/1808.10071
-    if ndetectors == 1:
-        P_w = 2*sigma_rms**2/cadence/N_p/(N_p-1) #Avg white noise from pulsar array [s**2/Hz]
-        f = np.logspace(np.log10(1/T_obs.value),np.log10(cadence.value/2),nfreqs)*u.Hz
-    else:
-        #Sum of pulsar noises in different time periods divided by total time
-        for i in range(ndetectors):
-            P_w_n = sigma_rms[i]**2*(T_obs[i]/cadence[i])/N_p[i]/(N_p[i]-1) #Avg white noise from pulsar arrays [s**2/Hz]
-            P_w_tot += P_w_n
-            T_obs_tot += T_obs[i]
-        P_w = 2*P_w_tot/T_obs_tot
-        #frequency sampled from 1/observation time to nyquist frequency (c/2)
-        f = np.logspace(np.log10(1/T_obs_tot.value),np.log10(min(cadence).value/2),nfreqs)*u.Hz
-    
-    #Paragraph below eqn 4 from Lam,M.T. 2018 https://arxiv.org/abs/1808.10071
-    #P_red = A_red.*(f./f_year).**(-gamma) # red noise for some pulsar
-    P_red = 0.0*u.s*u.s/u.Hz #Assume no pulsar red noise for simplicity
-    
-    #eqn 42 of T&R 2013 https://arxiv.org/abs/1310.5300
-    #h_inst = np.sqrt((12*np.pi**2*(P_w+P_red))*f**3)
-    ##################################################
-    #Stochastic background amplitude from Sesana et al. 2016 https://arxiv.org/pdf/1603.09348.pdf
-    P_sb = (A_stoch_back**2/12/np.pi**2)*f**(-3)*(f/f_year.to('Hz'))**(-4/3)
-    #h_sb = A_stoch_back*(f/f_year)**(-2/3)
-
-    ####################################################
-    #PSD of the full PTA from Lam,M.T. 2018 https://arxiv.org/abs/1808.10071
-    P_n = P_w + P_red + P_sb
-
-    #strain of the full PTA
-    #h_f = np.sqrt((12*np.pi**2)*f**3*P_n)
-    ASD = np.sqrt((12*np.pi**2)*f**2*P_n)
-    return f,ASD
 def Get_PTAASD(inst_var_dict,nfreqs=int(1e3),A_stoch_back=4e-16):
     f,PSD = Get_PTAPSD(inst_var_dict,nfreqs=nfreqs,A_stoch_back=A_stoch_back)
     ASD = np.sqrt((12*np.pi**2)*f**2*PSD)
@@ -59,7 +19,7 @@ def Get_PTAASD(inst_var_dict,nfreqs=int(1e3),A_stoch_back=4e-16):
 
 def Get_PTAASD_v2(inst_var_dict,nfreqs=int(1e3),A_stoch_back=4e-16):
     f,h_c = Get_PTAstrain(inst_var_dict,nfreqs=nfreqs)
-    #from Jenet et al. 2006 https://arxiv.org/abs/astro-ph/0609013
+    #from Jenet et al. 2006 https://arxiv.org/abs/astro-ph/0609013 (Only for GWB/broadband signals)
     P_w = h_c**2/12/np.pi**2*f**(-3)
 
     #Paragraph below eqn 4 from Lam,M.T. 2018 https://arxiv.org/abs/1808.10071
@@ -327,7 +287,7 @@ def Get_MonoStrain(Vars,T_obs,f_init,fT):
     h_gw = 8/np.sqrt(5)*np.sqrt(T_obs)*(const.c/DL)*(np.pi*fT[indxfgw])**(2./3.)*M_chirp**(5./3.)
     return [indxfgw,h_gw]
 
-def Get_PTAMonoStrain(Vars,T_obs,f_init,fT):
+def Get_MonoStrain_v2(Vars,T_obs,f_init,fT):
     [M,q,_,_,z] = Vars
     DL = cosmo.luminosity_distance(z)
     DL = DL.to('m')
@@ -346,8 +306,8 @@ def Get_PTAMonoStrain(Vars,T_obs,f_init,fT):
     a = 1+np.cos(inc)**2
     b = -2*np.cos(inc)
     A = 2*(const.c/DL)*(np.pi*fT[indxfgw])**(2./3.)*M_chirp**(5./3.)
-    h_gw = A*np.sqrt(.5*(a**2+b**2))
-
+    #h_gw = A*np.sqrt(.5*(a**2+b**2))
+    h_gw = A*3
     return [indxfgw,h_gw]
 
 def StrainConv(Vars,f,h):

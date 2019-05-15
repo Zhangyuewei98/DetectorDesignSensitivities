@@ -111,24 +111,17 @@ def calcPTAMonoSNR(source_var_dict,inst_var_dict,f_init):
     for name,sub_dict in source_var_dict.items():
         source_vars.append(source_var_dict[name]['val'])
 
-    inst_vars = []
-    for name,sub_dict in inst_var_dict.items():
-        inst_vars.append(inst_var_dict[name]['val'])
+    T_obs = 0.0
+    for pta_name, pta_dict in inst_var_dict.items():
+        for var_name,var_dict in pta_dict.items():
+            if var_name == 'Tobs':
+                T_obs += var_dict['val']
 
-    [T_obs,N_p,sigma_rms,cadence] = inst_vars
+    f, h_c_inst = SnN.Get_PTAstrain(inst_var_dict)
 
-    f, PSD = SnN.calcPTAPSD(inst_var_dict,A_stoch_back=0.0)
+    indxfgw,h_c_source = SnN.Get_MonoStrain_v2(source_vars,T_obs,f_init,f)
 
-    indxfgw,h_char = SnN.Get_PTAMonoStrain(source_vars,T_obs,f_init,f)
-
-    chi_corr = 1/np.sqrt(3) #Sky averaged geometric factor eqn. 11
-
-    SNR_scale = .5*N_p*(N_p-1)*8*chi_corr**4*h_char**4/T_obs
-
-    #delta_approx = np.sin(np.pi*(f-f_init).value*T_obs.value)/np.pi/((f-f_init).value)
-
-    SNRsqrd = SNR_scale/f[indxfgw]**5/PSD[indxfgw]**2 #SNR**2
-    SNR = np.sqrt(SNRsqrd)
+    SNR = h_c_source/h_c_inst[indxfgw]
     return SNR
 
 def calcMonoSNR(source_var_dict,fT,S_n_f_sqrt,T_obs,f_init):
