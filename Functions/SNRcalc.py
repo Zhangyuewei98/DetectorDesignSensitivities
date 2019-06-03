@@ -17,7 +17,7 @@ from fractions import Fraction
 import StrainandNoise as SnN
 
 
-def checkFreqEvol(var_dict,T_obs,f_init):
+def checkFreqEvol(source_var_dict,T_obs,f_init):
     #####################################
     #If the initial observed time from merger is less than the time observed
     #(ie t_init-T_obs < 0 => f_evolve is complex),
@@ -34,9 +34,9 @@ def checkFreqEvol(var_dict,T_obs,f_init):
     #frequency at an observation time before merger
     #####################################
     
-    M = var_dict['M']['val']
-    q = var_dict['q']['val']
-    z = var_dict['z']['val']
+    M = source_var_dict['M']['val']
+    q = source_var_dict['q']['val']
+    z = source_var_dict['z']['val']
     m_conv = const.G*const.M_sun/const.c**3 #Converts M = [M] to M = [sec]
     
     eta = q/(1+q)**2
@@ -53,7 +53,7 @@ def checkFreqEvol(var_dict,T_obs,f_init):
     else:
         return f_T_obs, False
 
-def getSNRMatrix(var_dict,fT,S_n_f_sqrt,T_obs,var_x,sampleRate_x,var_y,sampleRate_y):
+def getSNRMatrix(source_var_dict,inst_var_dict,fT,S_n_f_sqrt,T_obs,var_x,sampleRate_x,var_y,sampleRate_y,PTA_model=False):
     # # Setting Up SNR Calculation
     # Uses the variable given and the data range to sample the space either logrithmically or linearly based on the 
     # selection of variables. Then it computes the SNR for each value.
@@ -63,48 +63,73 @@ def getSNRMatrix(var_dict,fT,S_n_f_sqrt,T_obs,var_x,sampleRate_x,var_y,sampleRat
 
     if var_y == 'q' or var_y == 'chi1' or var_y == 'chi2':
         #Sample in linear space for mass ratio and spins
-        sample_y = np.linspace(var_dict[var_y]['min'],var_dict[var_y]['max'],sampleRate_y)
+        sample_y = np.linspace(source_var_dict[var_y]['min'],source_var_dict[var_y]['max'],sampleRate_y)
         recalculate = True #Must recalculate the waveform at each point
     else:
         #Sample in log space for any other variables
-        sample_y = np.logspace(np.log10(var_dict[var_y]['min']),np.log10(var_dict[var_y]['max']),sampleRate_y)
+        sample_y = np.logspace(np.log10(source_var_dict[var_y]['min']),np.log10(source_var_dict[var_y]['max']),sampleRate_y)
 
     if var_x == 'q' or var_x == 'chi1' or var_x == 'chi2':
         #Sample in linear space for mass ratio and spins
-        sample_x = np.linspace(var_dict[var_x]['min'],var_dict[var_x]['max'],sampleRate_x)
+        sample_x = np.linspace(source_var_dict[var_x]['min'],source_var_dict[var_x]['max'],sampleRate_x)
         recalculate = True #Must recalculate the waveform at each point
     else:
         #Sample in log space for any other variables
-        sample_x = np.logspace(np.log10(var_dict[var_x]['min']),np.log10(var_dict[var_x]['max']),sampleRate_x)
+        sample_x = np.logspace(np.log10(source_var_dict[var_x]['min']),np.log10(source_var_dict[var_x]['max']),sampleRate_x)
 
     sampleSize_x = len(sample_x)
     sampleSize_y = len(sample_y)
     SNRMatrix = np.zeros((sampleSize_x,sampleSize_y))
+    tmpSNRMatrix=np.zeros((sampleSize_x,sampleSize_y))
     
     for i in range(sampleSize_x):
         for j in range(sampleSize_y):
-            var_dict[var_x]['val'] = sample_x[i]
-            var_dict[var_y]['val'] = sample_y[j]
+            source_var_dict[var_x]['val'] = sample_x[i]
+            source_var_dict[var_y]['val'] = sample_y[j]
             #if ismono f_init=f_opt, else f_init=f_T_obs
-            f_init, ismono = checkFreqEvol(var_dict,T_obs,f_opt)
+            f_init, ismono = checkFreqEvol(source_var_dict,T_obs,f_opt)
             if ismono:
-                SNRMatrix[j,i] = calcMonoSNR(var_dict,fT,S_n_f_sqrt,T_obs,f_init)
+                if PTA_model:
+                    SNRMatrix[j,i] = calcPTAMonoSNR(source_var_dict,inst_var_dict,f_init)
+                else:
+                    SNRMatrix[j,i] = calcMonoSNR(source_var_dict,fT,S_n_f_sqrt,T_obs,f_init)
             else:
                 recalculate = False #Assume we only need to calculate the waveform once
                 initVars = []
-                for name in var_dict.keys():
-                    initVars.append(var_dict[name]['val'])
+                for name in source_var_dict.keys():
+                    initVars.append(source_var_dict[name]['val'])
                 [phenomD_f,phenomD_h] = SnN.Get_Waveform(initVars)
-                SNRMatrix[j,i] = calcChirpSNR(var_dict,fT,S_n_f_sqrt,T_obs,f_init,phenomD_f,phenomD_h,recalculate)
+                SNRMatrix[j,i] = calcChirpSNR(source_var_dict,fT,S_n_f_sqrt,T_obs,f_init,phenomD_f,phenomD_h,recalculate)
+            #tmpSNRMatrix[j,i] = calcPTAMonoSNR(source_var_dict,inst_var_dict,f_init)
+    #return [sample_x,sample_y,SNRMatrix,tmpSNRMatrix]
     return [sample_x,sample_y,SNRMatrix]
 
+def calcPTAMonoSNR(source_var_dict,inst_var_dict,f_init):
+    #SNR for a monochromatic source in a PTA
+    #From Moore,Taylor,and Gair 2015 https://arxiv.org/abs/1406.5199
+    source_vars = []
+    for name,sub_dict in source_var_dict.items():
+        source_vars.append(source_var_dict[name]['val'])
 
-def calcMonoSNR(var_dict,fT,S_n_f_sqrt,T_obs,f_init):
+    T_obs = 0.0
+    for pta_name, pta_dict in inst_var_dict.items():
+        for var_name,var_dict in pta_dict.items():
+            if var_name == 'Tobs':
+                T_obs += var_dict['val']
+
+    f, h_c_inst = SnN.Get_PTAstrain(inst_var_dict)
+
+    indxfgw,h_c_source = SnN.Get_MonoStrain_v2(source_vars,T_obs,f_init,f)
+
+    SNR = h_c_source/h_c_inst[indxfgw]
+    return SNR
+
+def calcMonoSNR(source_var_dict,fT,S_n_f_sqrt,T_obs,f_init):
     #Calculation of monochromatic source strain
     #See ~pg. 9 in Robson,Cornish,and Liu 2018 https://arxiv.org/abs/1803.01944
     Vars = []
-    for name,sub_dict in var_dict.items():
-        Vars.append(var_dict[name]['val'])
+    for name,sub_dict in source_var_dict.items():
+        Vars.append(source_var_dict[name]['val'])
 
     S_n_f = S_n_f_sqrt**2 #Amplitude Spectral Density
     indxfgw,h_gw = SnN.Get_MonoStrain(Vars,T_obs,f_init,fT)
@@ -113,15 +138,15 @@ def calcMonoSNR(var_dict,fT,S_n_f_sqrt,T_obs,f_init):
     SNR = np.sqrt(h_gw**2/S_n_f[indxfgw])
     return SNR
 
-def calcChirpSNR(var_dict,fT,S_n_f_sqrt,T_obs,f_init,phenomD_f,phenomD_h,recalculate):
+def calcChirpSNR(source_var_dict,fT,S_n_f_sqrt,T_obs,f_init,phenomD_f,phenomD_h,recalculate):
     #Calculates evolving source using non-precessing binary black hole waveform model IMRPhenomD
     #See Husa et al. 2016 (https://arxiv.org/abs/1508.07250) and Khan et al. 2016 (https://arxiv.org/abs/1508.07253)
     #Uses an interpolated method to align waveform and instrument noise, then integrates 
     # over the overlapping region. See eqn 18 from Robson,Cornish,and Liu 2018 https://arxiv.org/abs/1803.01944
     # Values outside of the sensitivity curve are arbitrarily set to 1e30 so the SNR is effectively 0
     Vars = []
-    for name,sub_dict in var_dict.items():
-        Vars.append(var_dict[name]['val'])
+    for name,sub_dict in source_var_dict.items():
+        Vars.append(source_var_dict[name]['val'])
 
     S_n_f = S_n_f_sqrt**2 #Amplitude Spectral Density
 
@@ -158,10 +183,11 @@ def calcChirpSNR(var_dict,fT,S_n_f_sqrt,T_obs,f_init,phenomD_f,phenomD_h,recalcu
     return SNR
 
 
-def plotSNR(var_dict,var_x,sample_x,var_y,sample_y,SNRMatrix):
+def plotSNR(source_var_dict,var_x,sample_x,var_y,sample_y,SNRMatrix):
     '''Plots the SNR contours from calcSNR'''
     #Selects contour levels to separate sections into
     contLevels = np.array([5,10, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7])
+    logLevels = np.log10(contLevels)
     axissize = 14
     labelsize = 16
     textsize = 11
@@ -175,58 +201,59 @@ def plotSNR(var_dict,var_x,sample_x,var_y,sample_y,SNRMatrix):
     transparencyFuture = 1.0
     colornorm = colors.Normalize(vmin=0.0, vmax=5.0)
     colormap = 'viridis'
-    logLevels = np.log10(contLevels)
     logSNR = np.log10(SNRMatrix)
-    xlabel_min = var_dict[var_x]['min']
-    xlabel_max = var_dict[var_x]['max']
-    ylabel_min = var_dict[var_y]['min']
-    ylabel_max = var_dict[var_y]['max']
+    xlabel_min = source_var_dict[var_x]['min']
+    xlabel_max = source_var_dict[var_x]['max']
+    ylabel_min = source_var_dict[var_y]['min']
+    ylabel_max = source_var_dict[var_y]['max']
 
     #########################
     #Make the Contour Plots
-    fig1, ax1 = plt.subplots(figsize=figsize)
+    fig, ax = plt.subplots(figsize=figsize)
 
     #Set axis scales based on what data sampling we used 
     if (var_y == 'q' or var_y == 'chi1' or var_y == 'chi2') and (var_x != 'q' and var_x != 'chi1' and var_x != 'chi2'):
-        CS1 = ax1.contourf(np.log10(sample_x),sample_y,logSNR,logLevels,cmap = colormap)
-        ax1.set_xlim(np.log10(xlabel_min),np.log10(xlabel_max))
-        ax1.set_ylim(ylabel_min,ylabel_max)
+        CS1 = ax.contourf(np.log10(sample_x),sample_y,logSNR,logLevels,cmap = colormap)
+        ax.set_xlim(np.log10(xlabel_min),np.log10(xlabel_max))
+        ax.set_ylim(ylabel_min,ylabel_max)
         x_labels = np.logspace(np.log10(xlabel_min),np.log10(xlabel_max),np.log10(xlabel_max)-np.log10(xlabel_min)+1)
         y_labels = np.range(ylabel_min,ylabel_max,1)
-        ax1.set_yticks(y_labels)
-        ax1.set_yticklabels(y_labels,fontsize = axissize)
-        ax1.set_xticks(np.log10(x_labels))
-        ax1.set_xticklabels(np.log10(x_labels),fontsize = axissize)
+        ax.set_yticks(y_labels)
+        ax.set_yticklabels(y_labels,fontsize = axissize)
+        ax.set_xticks(np.log10(x_labels))
+        ax.set_xticklabels(np.log10(x_labels),fontsize = axissize)
     elif (var_y != 'q' or var_y != 'chi1'  or var_y != 'chi2' ) and (var_x == 'q' and var_x == 'chi1' and var_x == 'chi2'):
-        CS1 = ax1.contourf(sample_x,np.log10(sample_y),logSNR,logLevels,cmap = colormap)
-        ax1.set_xlim(xlabel_min,xlabel_max)
-        ax1.set_ylim(np.log10(ylabel_min),np.log10(ylabel_max))
+        CS1 = ax.contourf(sample_x,np.log10(sample_y),logSNR,logLevels,cmap = colormap)
+        ax.set_xlim(xlabel_min,xlabel_max)
+        ax.set_ylim(np.log10(ylabel_min),np.log10(ylabel_max))
         x_labels = np.range(xlabel_min,xlabel_max,1)
         y_labels = np.logspace(np.log10(ylabel_min),np.log10(ylabel_max),np.log10(ylabel_max)-np.log10(ylabel_min)+1)
-        ax1.set_xticks(x_labels)
-        ax1.set_xticklabels(x_labels,fontsize = axissize)
-        ax1.set_yticks(np.log10(y_labels))
-        ax1.set_yticklabels(np.log10(y_labels),fontsize = axissize)
+        ax.set_xticks(x_labels)
+        ax.set_xticklabels(x_labels,fontsize = axissize)
+        ax.set_yticks(np.log10(y_labels))
+        ax.set_yticklabels(np.log10(y_labels),fontsize = axissize)
     elif (var_y != 'q' or var_y != 'chi1' or var_y != 'chi2') and (var_x != 'q' and var_x != 'chi1' and var_x != 'chi2'):
-        CS1 = ax1.contourf(np.log10(sample_x),np.log10(sample_y),logSNR,logLevels,cmap = colormap)
-        ax1.set_xlim(np.log10(xlabel_min),np.log10(xlabel_max))
-        ax1.set_ylim(np.log10(ylabel_min),np.log10(ylabel_max))
+        CS1 = ax.contourf(np.log10(sample_x),np.log10(sample_y),logSNR,logLevels,cmap = colormap)
+        ax.set_xlim(np.log10(xlabel_min),np.log10(xlabel_max))
+        ax.set_ylim(np.log10(ylabel_min),np.log10(ylabel_max))
         x_labels = np.logspace(np.log10(xlabel_min),np.log10(xlabel_max),np.log10(xlabel_max)-np.log10(xlabel_min)+1)
         y_labels = np.logspace(np.log10(ylabel_min),np.log10(ylabel_max),np.log10(ylabel_max)-np.log10(ylabel_min)+1)
-        ax1.set_yticks(np.log10(y_labels))
-        ax1.set_yticklabels(np.log10(y_labels),fontsize = axissize)
-        ax1.set_xticks(np.log10(x_labels))
-        ax1.set_xticklabels(np.log10(x_labels),fontsize = axissize)
+        ax.set_yticks(np.log10(y_labels))
+        ax.set_xticks(np.log10(x_labels))
+        ax.set_yticklabels([x if int(x) < 1 else int(x) for x in y_labels],\
+            fontsize = axissize)
+        ax.set_xticklabels([r'$10^{%i}$' %x if int(x) > 1 else r'$%i$' %(10**x) for x in np.log10(x_labels)],\
+            fontsize = axissize)
 
-    ax1.set_xlabel(r'${\rm log}(M_{\rm tot})$ $[M_{\odot}]$',fontsize = labelsize)
-    ax1.set_ylabel(r'${\rm log}(z)$',fontsize = labelsize)
-    ax1.yaxis.set_label_coords(-.10,.5)
+    ax.set_xlabel(r'$M_{\rm tot}$ $[M_{\odot}]$',fontsize = labelsize)
+    ax.set_ylabel(r'${\rm Redshift}$',fontsize = labelsize)
+    ax.yaxis.set_label_coords(-.10,.5)
     #########################
     #Make colorbar
-    cbar1 = fig1.colorbar(CS1)
-    cbar1.set_label(r'${\rm log}(SNR)$',fontsize = labelsize)
-    cbar1.ax.tick_params(labelsize = axissize)
-    cbar1.ax.set_yticklabels([r'$10^{%i}$' %x for x in logLevels])
+    cbar = fig.colorbar(CS1)
+    cbar.set_label(r'$SNR$',fontsize = labelsize)
+    cbar.ax.tick_params(labelsize = axissize)
+    cbar.ax.set_yticklabels([r'$10^{%i}$' %x if int(x) > 1 else r'$%i$' %(10**x) for x in logLevels])
 
     plt.show()
 
