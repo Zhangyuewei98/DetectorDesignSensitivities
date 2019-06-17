@@ -337,3 +337,13 @@ def Get_Waveform(Vars,nfreqs=int(1e3),f_low=1e-9):
     [phenomD_f,phenomD_h] = PhenomD.FunPhenomD(Vars,fitcoeffs,nfreqs,f_low=f_low)
     return [phenomD_f,phenomD_h]
 
+def Get_hf_from_hcross_hplus(t,h_cross,h_plus):
+    #Converts dimensionless, time domain strain to frequency space
+    #Filter/Window beginning
+
+    #FFT the two polarizations
+    h_cross_f = np.fft.fft(h_cross)
+    h_plus_f = np.fft.fft(h_plus)
+    #Combine them for raw spectral power
+    h_f = np.sqrt((np.abs(h_cross_f))**2 + (np.abs(h_plus_f))**2)
+
