@@ -340,10 +340,14 @@ def Get_Waveform(Vars,nfreqs=int(1e3),f_low=1e-9):
 def Get_hf_from_hcross_hplus(t,h_cross,h_plus):
     #Converts dimensionless, time domain strain to frequency space
     #Filter/Window beginning
-
+    window = np.hanning(len(t))
+    win_h_cross_f = np.multiply(h_cross,window)
+    win_h_plus_f = np.multiply(h_plus,window)
     #FFT the two polarizations
-    h_cross_f = np.fft.fft(h_cross)
-    h_plus_f = np.fft.fft(h_plus)
+    h_cross_f = np.fft.fft(win_h_cross_f)
+    h_plus_f = np.fft.fft(win_h_plus_f)
     #Combine them for raw spectral power
     h_f = np.sqrt((np.abs(h_cross_f))**2 + (np.abs(h_plus_f))**2)
+
+    return h_cross_f,h_plus_f,h_f
 
