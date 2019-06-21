@@ -340,7 +340,11 @@ def Get_Waveform(Vars,nfreqs=int(1e3),f_low=1e-9):
 def Get_hf_from_hcross_hplus(t,h_cross,h_plus):
     #Converts dimensionless, time domain strain to frequency space
     #Filter/Window beginning
-    window = np.hanning(len(t))
+    hann_window = np.hanning(len(t)) #Two sided
+    first_half = hann_window[:int(len(t)/2)] # Only need tapering on first half of waveform
+    second_half = np.ones(len(t)-len(first_half)) #no windowing on second half of waveform
+    window = np.append(first_half,second_half) # Only apply window to first half of waveform
+
     win_h_cross_f = np.multiply(h_cross,window)
     win_h_plus_f = np.multiply(h_plus,window)
     #FFT the two polarizations
