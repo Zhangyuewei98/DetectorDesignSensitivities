@@ -2,8 +2,12 @@ import numpy as np
 import os
 import astropy.constants as const
 import astropy.units as u
+import scipy.interpolate as interp
 from astropy.cosmology import z_at_value
 from astropy.cosmology import WMAP9 as cosmo
+
+import matplotlib.pyplot as plt
+
 
 import IMRPhenomD as PhenomD
 
@@ -337,25 +341,56 @@ def Get_Waveform(Vars,nfreqs=int(1e3),f_low=1e-9):
     [phenomD_f,phenomD_h] = PhenomD.FunPhenomD(Vars,fitcoeffs,nfreqs,f_low=f_low)
     return [phenomD_f,phenomD_h]
 
-def Get_hf_from_hcross_hplus(t,h_cross,h_plus):
-    #Converts dimensionless, time domain strain to frequency space
-    #Filter/Window beginning
-    hann_window = np.hanning(len(t)) #Two sided
-    second_half = hann_window[int(len(t)/2):] # Only need tapering on second half of waveform
-    first_half = np.ones(len(t)-len(second_half)) #no windowing on first half of waveform
-    window = np.append(first_half,second_half) # Only apply window to first half of waveform
+def Get_hf_from_hcross_hplus(t,h_cross,h_plus,interp_res='coarse',window_half='left'):
+    '''Converts dimensionless, time domain strain to frequency space'''
 
-    win_h_cross_t = np.multiply(h_cross,window)
-    win_h_plus_t = np.multiply(h_plus,window)
+    #Interpolate time to evenly sampled data, can be fine or coarse
+    diff_t = np.diff(t.value)
+    if interp_res == 'fine':
+        dt = min(diff_t)
+    elif interp_res == 'coarse':
+        dt = max(diff_t)
+
+    interp_t = np.arange(t[0].value,t[-1].value,dt)
+    #interpolate strain to evenly sampled data for FFT
+    h_cross_t = interp.interp1d(t,h_cross,kind='cubic')
+    h_plus_t = interp.interp1d(t,h_plus,kind='cubic')
+    interp_h_cross_t = h_cross_t(interp_t)
+    interp_h_plus_t = h_plus_t(interp_t)
+
+    #Filter/Window
+    hann_window = np.hanning(len(interp_t)) #Two sided
+    if window_half == 'left':
+        #########################
+        '''Applies window to first (left) half'''
+        first_half = hann_window[:int(len(interp_t)/2)] # Only need tapering on first half of waveform
+        second_half = np.ones(len(interp_t)-len(first_half)) #no windowing on second half of waveform
+        #########################
+    elif window_half == 'right':
+        #########################
+        '''Applies window to second (right) half'''
+        second_half = hann_window[int(len(interp_t)/2):] # Only need tapering on second half of waveform
+        first_half = np.ones(len(interp_t)-len(second_half)) #no windowing on first half of waveform
+        #########################
+    window = np.append(first_half,second_half) # Only apply window to first half of waveform
+    #Window!     
+    win_h_cross_t = np.multiply(interp_h_cross_t,window)
+    win_h_plus_t = np.multiply(interp_h_plus_t,window)
+
     #FFT the two polarizations
     h_cross_f = np.fft.fft(win_h_cross_t)
     h_plus_f = np.fft.fft(win_h_plus_t)
-    #Cut off the very end
-    cut=int(len(hc_f)*0.02)
+    freqs = np.fft.fftfreq(len(interp_t),d=dt)
+
+    #Cut off the negative frequencies
+    cut = np.abs(freqs).argmax()
+    #cut=int(len(h_cross_f)*0.5)
     h_cross_f = h_cross_f[:(len(h_cross_f)-cut)]
     h_plus_f = h_plus_f[:(len(h_plus_f)-cut)]
+    freqs = freqs[:(len(freqs)-cut)]
+    
     #Combine them for raw spectral power
     h_f = np.sqrt((np.abs(h_cross_f))**2 + (np.abs(h_plus_f))**2)
 
-    return h_cross_f,h_plus_f,h_f
+    return freqs,h_f
 
