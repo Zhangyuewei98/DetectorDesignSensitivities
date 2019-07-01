@@ -341,15 +341,19 @@ def Get_hf_from_hcross_hplus(t,h_cross,h_plus):
     #Converts dimensionless, time domain strain to frequency space
     #Filter/Window beginning
     hann_window = np.hanning(len(t)) #Two sided
-    first_half = hann_window[:int(len(t)/2)] # Only need tapering on first half of waveform
-    second_half = np.ones(len(t)-len(first_half)) #no windowing on second half of waveform
+    second_half = hann_window[int(len(t)/2):] # Only need tapering on second half of waveform
+    first_half = np.ones(len(t)-len(second_half)) #no windowing on first half of waveform
     window = np.append(first_half,second_half) # Only apply window to first half of waveform
 
-    win_h_cross_f = np.multiply(h_cross,window)
-    win_h_plus_f = np.multiply(h_plus,window)
+    win_h_cross_t = np.multiply(h_cross,window)
+    win_h_plus_t = np.multiply(h_plus,window)
     #FFT the two polarizations
-    h_cross_f = np.fft.fft(win_h_cross_f)
-    h_plus_f = np.fft.fft(win_h_plus_f)
+    h_cross_f = np.fft.fft(win_h_cross_t)
+    h_plus_f = np.fft.fft(win_h_plus_t)
+    #Cut off the very end
+    cut=int(len(hc_f)*0.02)
+    h_cross_f = h_cross_f[:(len(h_cross_f)-cut)]
+    h_plus_f = h_plus_f[:(len(h_plus_f)-cut)]
     #Combine them for raw spectral power
     h_f = np.sqrt((np.abs(h_cross_f))**2 + (np.abs(h_plus_f))**2)
 
