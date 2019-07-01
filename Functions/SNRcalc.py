@@ -186,6 +186,46 @@ def calcChirpSNR(source_var_dict,fT,S_n_f_sqrt,T_obs,f_init,phenomD_f,phenomD_h,
     SNR = np.sqrt(SNRsqrd)
     return SNR
 
+def calcDiffSNR(source_var_dict,fT,S_n_f_sqrt,T_obs,f_init,diff_f,diff_h):
+    #Calculates the SNR loss from the difference in EOB waveforms and numerical relativity.
+    # The strain is from Sean McWilliams in a private communication.
+    #Uses an interpolated method to align waveform and instrument noise, then integrates 
+    # over the overlapping region. See eqn 18 from Robson,Cornish,and Liu 2018 https://arxiv.org/abs/1803.01944
+    # Values outside of the sensitivity curve are arbitrarily set to 1e30 so the SNR is effectively 0
+    Vars = []
+    for name,sub_dict in source_var_dict.items():
+        Vars.append(source_var_dict[name]['val'])
+
+    S_n_f = S_n_f_sqrt**2 #Amplitude Spectral Density
+    
+    diff_f,diff_h = SnN.StrainConv(Vars,diff_f,diff_h)
+    #Only want to integrate from observed frequency (f(T_obs_before_merger)) till merger
+    indxfgw = np.abs(diff_f-f_init).argmin()
+    if indxfgw >= len(diff_f)-1:
+        #If the SMBH has already merged set the SNR to ~0
+        return 1e-30  
+    else:
+        f_cut = diff_f[indxfgw:]
+        h_cut = diff_h[indxfgw:]
+
+    #################################
+    #Interpolate the Strain Noise Spectral Density to only the frequencies the
+    #strain runs over
+    #Set Noise to 1e30 outside of signal frequencies
+    S_n_f_interp_old = interp.interp1d(np.log10(fT.value),np.log10(S_n_f.value),kind='cubic',fill_value=30.0, bounds_error=False) 
+    S_n_f_interp_new = S_n_f_interp_old(np.log10(f_cut.value))
+    S_n_f_interp = 10**S_n_f_interp_new
+
+    #CALCULATE SNR FOR BOTH NOISE CURVES
+    denom = S_n_f_interp #Sky Averaged Noise Spectral Density
+    numer = f_cut*h_cut**2
+
+    integral_consts = 16/5 # 4 or(4*4/5) from sky/inclination/polarization averaging
+
+    integrand = numer/denom
+    SNRsqrd = integral_consts*np.trapz(integrand.value,np.log(f_cut.value),axis=0) #SNR**2
+    SNR = np.sqrt(SNRsqrd)
+    return SNR
 
 def plotSNR(source_var_dict,var_x,sample_x,var_y,sample_y,SNRMatrix):
     '''Plots the SNR contours from calcSNR'''

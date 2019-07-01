@@ -341,7 +341,7 @@ def Get_Waveform(Vars,nfreqs=int(1e3),f_low=1e-9):
     [phenomD_f,phenomD_h] = PhenomD.FunPhenomD(Vars,fitcoeffs,nfreqs,f_low=f_low)
     return [phenomD_f,phenomD_h]
 
-def Get_hf_from_hcross_hplus(t,h_cross,h_plus,interp_res='coarse',window_half='left'):
+def Get_hf_from_hcross_hplus(t,h_cross,h_plus,interp_res='coarse',windowing='left'):
     '''Converts dimensionless, time domain strain to frequency space'''
 
     #Interpolate time to evenly sampled data, can be fine or coarse
@@ -360,19 +360,22 @@ def Get_hf_from_hcross_hplus(t,h_cross,h_plus,interp_res='coarse',window_half='l
 
     #Filter/Window
     hann_window = np.hanning(len(interp_t)) #Two sided
-    if window_half == 'left':
+    if windowing == 'left':
         #########################
         '''Applies window to first (left) half'''
         first_half = hann_window[:int(len(interp_t)/2)] # Only need tapering on first half of waveform
         second_half = np.ones(len(interp_t)-len(first_half)) #no windowing on second half of waveform
         #########################
-    elif window_half == 'right':
+        window = np.append(first_half,second_half) # Only apply window to first half of waveform
+    elif windowing == 'right':
         #########################
         '''Applies window to second (right) half'''
         second_half = hann_window[int(len(interp_t)/2):] # Only need tapering on second half of waveform
         first_half = np.ones(len(interp_t)-len(second_half)) #no windowing on first half of waveform
         #########################
-    window = np.append(first_half,second_half) # Only apply window to first half of waveform
+        window = np.append(first_half,second_half)
+    elif windowing == 'all':
+        window = hann_window
     #Window!     
     win_h_cross_t = np.multiply(interp_h_cross_t,window)
     win_h_plus_t = np.multiply(interp_h_plus_t,window)
