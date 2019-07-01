@@ -1,17 +1,21 @@
+import os, time, sys, struct
+
 import numpy as np
+
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 from matplotlib.image import NonUniformImage
 import matplotlib.ticker as ticker
 from matplotlib import cm
-import os, time, sys
-import struct
+
 import scipy.interpolate as interp
 import scipy.integrate as integrate
+
 import astropy.constants as const
 import astropy.units as u
 from astropy.cosmology import z_at_value
 from astropy.cosmology import WMAP9 as cosmo
+
 from fractions import Fraction
 
 import StrainandNoise as SnN
