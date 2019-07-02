@@ -137,14 +137,24 @@ def getSNRMatrix(source_var_dict,inst_var_dict,var_x,sampleRate_x,var_y,sampleRa
             if recalculate_noise != 'neither':
                 #Recalculate noise curves if something is varied
                 if inst_name.split('_')[0] == 'LISA' and (i==0 and j==0): #Don't reload Transfer Function every time
-                    reload_T = True
-                    LISA_Transfer_Function_data = SnN.Load_TransferFunction()
-                elif inst_name.split('_')[0] == 'LISA' and (i!=0 or j!=0): #Already loaded Transfer Function
-                    reload_T = False
+                    reload_data = True
+                    Instrument_data = SnN.Load_TransferFunction()
+                elif inst_name == 'ET' and (i==0 and j==0): #Load ET data once
+                    load_name = 'ET_D_data.txt'
+                    load_location = load_directory + 'EinsteinTelescope/StrainFiles/' + load_name
+                    Instrument_data = np.loadtxt(load_location)
+                    reload_data = False
+                elif inst_name == 'aLIGO' and (i==0 and j==0): # Load aLIGO data once
+                    load_name = 'aLIGODesign.txt'
+                    load_location = load_directory + 'aLIGO/StrainFiles/' + load_name
+                    Instrument_data = np.loadtxt(load_location)
+                    reload_data = False
+                elif inst_name.split('_')[0] == 'LISA' or inst_name == 'ET' or inst_name == 'aLIGO' and (i!=0 or j!=0): #Already loaded Transfer Function
+                    reload_data = False
                 else: # Doesn't have a transfer function
-                    LISA_Transfer_Function_data = None
-                    reload_T = False
-                [fT,S_n_f_sqrt] = Model_Selection(inst_var_dict,Background,reload_T=reload_T,T_data=LISA_Transfer_Function_data)
+                    Instrument_data = None
+                    reload_data = False
+                [fT,S_n_f_sqrt] = Model_Selection(inst_var_dict,Background,reload_data=reload_data,I_data=Instrument_data)
             if recalculate_noise != 'both' or (recalculate_noise == 'neither' and i==0 and j==0) or var_x == 'Tobs' or var_y == 'Tobs':
                 '''Only recalulate strain if necessary (otherwise leave it at the original values)
                     If it is the first iteration, calculate strain
@@ -213,7 +223,7 @@ def Get_Samples(sup_dict,var_x,sampleRate_x,var_y,sampleRate_y):
             print('y var: ',var_name)
     return sample_x,sample_y,recalculate_strain
 
-def Model_Selection(inst_var_dict,Background,reload_T=True,T_data=None):
+def Model_Selection(inst_var_dict,Background,reload_data=True,I_data=None):
     '''Uses inst_var_dict (the instrument dictionary) to calculate the frequency
         and amplitude spectral density corresponding to the detector's name in the
         dictionary
@@ -228,31 +238,29 @@ def Model_Selection(inst_var_dict,Background,reload_T=True,T_data=None):
         print('Nothing Yet.')
 
     if inst_name == 'LISA_Neil': #Robson,Cornish,and Liu 2018, LISA (https://arxiv.org/pdf/1803.01944.pdf)
-        fT,S_n_f_sqrt = SnN.NeilSensitivity(inst_var_dict,Background=Background,reload_T=reload_T,T_data=T_data)
+        fT,S_n_f_sqrt = SnN.NeilSensitivity(inst_var_dict,Background=Background,reload_T=reload_data,T_data=I_data)
         S_n_f_sqrt = S_n_f_sqrt/(u.Hz)**Fraction(1,2)
         
     elif inst_name == 'LISA_Martin': #Martin 2016: LISA Calculation without pathfinder correction (2016 model)
-        fT,S_n_f_sqrt = SnN.MartinSensitivity(inst_var_dict,Background=Background,reload_T=reload_T,T_data=T_data)
+        fT,S_n_f_sqrt = SnN.MartinSensitivity(inst_var_dict,Background=Background,reload_T=reload_data,T_data=I_data)
         S_n_f_sqrt = S_n_f_sqrt/(u.Hz)**Fraction(1,2)
         
     elif inst_name == 'ET': #Einstein Telescope
-        load_name = 'ET_D_data.txt'
-        load_location = load_directory + 'EinsteinTelescope/StrainFiles/' + load_name
-        
-        ET_data = np.loadtxt(load_location)
-        
-        fT = ET_data[:,0]*u.Hz
-        S_n_f_sqrt = ET_data[:,1]
+        if reload_data == True:
+            load_name = 'ET_D_data.txt'
+            load_location = load_directory + 'EinsteinTelescope/StrainFiles/' + load_name
+            Instrument_data = np.loadtxt(load_location)
+        fT = I_data[:,0]*u.Hz
+        S_n_f_sqrt = I_data[:,1]
         S_n_f_sqrt = S_n_f_sqrt/(u.Hz)**Fraction(1,2)
         
     elif inst_name == 'aLIGO': #aLIGO
-        load_name = 'aLIGODesign.txt'
-        load_location = load_directory + 'aLIGO/StrainFiles/' + load_name
-        
-        aLIGO_data = np.loadtxt(load_location)
-                
-        fT = aLIGO_data[:,0]*u.Hz
-        S_n_f_sqrt = aLIGO_data[:,1]
+        if reload_data == True:
+            load_name = 'aLIGODesign.txt'
+            load_location = load_directory + 'aLIGO/StrainFiles/' + load_name
+            I_data = np.loadtxt(load_location)
+        fT = I_data[:,0]*u.Hz
+        S_n_f_sqrt = I_data[:,1]
         S_n_f_sqrt = S_n_f_sqrt/(u.Hz)**Fraction(1,2)
         
     elif inst_name == 'NANOGrav': #NANOGrav 15 yr
@@ -271,7 +279,7 @@ def Model_Selection(inst_var_dict,Background,reload_T=True,T_data=None):
         ###############
         #NEED TO FIX BACKGROUND HARD CODING
         ###############
-        fT,S_n_f_sqrt = SnN.LisaSensitivity(inst_var_dict,Background=Background,reload_T=reload_T,T_data=T_data)
+        fT,S_n_f_sqrt = SnN.LisaSensitivity(inst_var_dict,Background=Background,reload_T=reload_data,T_data=I_data)
         S_n_f_sqrt = S_n_f_sqrt/(u.Hz)**Fraction(1,2)
     else:
         print('Whoops, not the right name!')
