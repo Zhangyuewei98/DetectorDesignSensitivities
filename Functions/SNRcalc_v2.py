@@ -20,6 +20,11 @@ from fractions import Fraction
 
 import StrainandNoise as SnN
 
+current_path = os.getcwd()
+splt_path = current_path.split("/")
+top_path_idx = splt_path.index('DetectorDesignSensitivities')
+top_directory = "/".join(splt_path[0:top_path_idx+1])
+load_directory = top_directory + '/LoadFiles/InstrumentFiles/'
 
 def checkFreqEvol(source_var_dict,T_obs,f_init):
     #####################################
@@ -57,29 +62,23 @@ def checkFreqEvol(source_var_dict,T_obs,f_init):
     else:
         return f_T_obs, False
 
-def getSNRMatrix(source_var_dict,inst_var_dict,fT,S_n_f_sqrt,T_obs,var_x,sampleRate_x,var_y,sampleRate_y,model):
+def getSNRMatrix(source_var_dict,inst_var_dict,var_x,sampleRate_x,var_y,sampleRate_y,model):
     # # Setting Up SNR Calculation
     # Uses the variable given and the data range to sample the space either logrithmically or linearly based on the 
     # selection of variables. Then it computes the SNR for each value.
     # Returns the variable ranges used to calculate the SNR for each matrix, then returns the SNRs with size of the sample_yXsample_x
     # 
+
+    [sample_x,sample_y,recalculate] = Get_Samples(source_var_dict,var_x,sampleRate_x,var_y,sampleRate_y)
+    [fT,S_n_f_sqrt] = Model_Selection(inst_var_dict,var_x,sampleRate_x,var_y,sampleRate_y,model)    
+
+    T_obs = 0.0
+    for inst_name, inst_dict in inst_var_dict.items():
+        for var_name,var_dict in inst_dict.items():
+            if var_name == 'Tobs':
+                T_obs += var_dict['val']
+
     f_opt = fT[np.argmin(S_n_f_sqrt)]
-
-    if var_y == 'q' or var_y == 'chi1' or var_y == 'chi2':
-        #Sample in linear space for mass ratio and spins
-        sample_y = np.linspace(source_var_dict[var_y]['min'],source_var_dict[var_y]['max'],sampleRate_y)
-        recalculate = True #Must recalculate the waveform at each point
-    else:
-        #Sample in log space for any other variables
-        sample_y = np.logspace(np.log10(source_var_dict[var_y]['min']),np.log10(source_var_dict[var_y]['max']),sampleRate_y)
-
-    if var_x == 'q' or var_x == 'chi1' or var_x == 'chi2':
-        #Sample in linear space for mass ratio and spins
-        sample_x = np.linspace(source_var_dict[var_x]['min'],source_var_dict[var_x]['max'],sampleRate_x)
-        recalculate = True #Must recalculate the waveform at each point
-    else:
-        #Sample in log space for any other variables
-        sample_x = np.logspace(np.log10(source_var_dict[var_x]['min']),np.log10(source_var_dict[var_x]['max']),sampleRate_x)
 
     sampleSize_x = len(sample_x)
     sampleSize_y = len(sample_y)
@@ -107,6 +106,100 @@ def getSNRMatrix(source_var_dict,inst_var_dict,fT,S_n_f_sqrt,T_obs,var_x,sampleR
             #tmpSNRMatrix[j,i] = calcPTAMonoSNR(source_var_dict,inst_var_dict,f_init)
     #return [sample_x,sample_y,SNRMatrix,tmpSNRMatrix]
     return [sample_x,sample_y,SNRMatrix]
+
+def Get_Samples(sup_dict,var_x,sampleRate_x,var_y,sampleRate_y):
+    sample_x = None
+    sample_y = None
+    recalculate = False
+    for var_name,var_dict in sup_dict.items():
+        if var_name == var_x:
+            if len(var_dict) == 3:
+                if var_x == 'q' or var_x == 'chi1' or var_x == 'chi2':
+                    #Sample in linear space for mass ratio and spins
+                    sample_x = np.linspace(sup_dict[var_x]['min'],sup_dict[var_x]['max'],sampleRate_x)
+                    recalculate = True #Must recalculate the waveform at each point
+                else:
+                    #Sample in log space for any other variables
+                    sample_x = np.logspace(np.log10(sup_dict[var_x]['min']),np.log10(sup_dict[var_x]['max']),sampleRate_x)
+            print('x var: ',var_name)
+        elif var_name == var_y:
+            if len(var_dict) == 3:
+                if var_y == 'q' or var_y == 'chi1' or var_y == 'chi2':
+                    #Sample in linear space for mass ratio and spins
+                    sample_y = np.linspace(sup_dict[var_y]['min'],sup_dict[var_y]['max'],sampleRate_y)
+                    recalculate = True #Must recalculate the waveform at each point
+                else:
+                    #Sample in log space for any other variables
+                    sample_y = np.logspace(np.log10(sup_dict[var_y]['min']),np.log10(sup_dict[var_y]['max']),sampleRate_y)
+            print('y var: ',var_name)
+    return sample_x,sample_y,recalculate
+
+def Model_Selection(inst_var_dict,var_x,sampleRate_x,var_y,sampleRate_y,model):
+    #Get the name of the instrument
+    if len(inst_var_dict) == 1:
+        inst_name = list(inst_var_dict.keys())[0]
+    elif len(inst_var_dict) == 2:
+        #Do something else (mostly for PTAs)
+        inst_name = 'SKA'
+        print('Nothing Yet.')
+
+    inst_dict = list(inst_var_dict.values())[0]
+
+    if inst_name == 'LISA_Neil': #Robson,Cornish,and Liu 2018, LISA (https://arxiv.org/pdf/1803.01944.pdf)
+        [sample_x,sample_y,recalculate] = Get_Samples(inst_dict,var_x,sampleRate_x,var_y,sampleRate_y)
+
+        fT,S_n_f_sqrt = SnN.NeilSensitivity(inst_var_dict)
+        S_n_f_sqrt = S_n_f_sqrt/(u.Hz)**Fraction(1,2)
+        
+    elif inst_name == 'LISA_Martin': #Martin 2016: LISA Calculation without pathfinder correction (2016 model)
+        [sample_x,sample_y,recalculate] = Get_Samples(inst_dict,var_x,sampleRate_x,var_y,sampleRate_y)
+                
+        fT,S_n_f_sqrt = SnN.MartinSensitivity(inst_var_dict)
+        S_n_f_sqrt = S_n_f_sqrt/(u.Hz)**Fraction(1,2)
+        
+    elif inst_name == 'ET': #Einstein Telescope
+        load_name = 'ET_D_data.txt'
+        load_location = load_directory + 'EinsteinTelescope/StrainFiles/' + load_name
+        
+        ET_data = np.loadtxt(load_location)
+
+        [sample_x,sample_y,recalculate] = Get_Samples(inst_dict,var_x,sampleRate_x,var_y,sampleRate_y)
+        
+        fT = ET_data[:,0]*u.Hz
+        S_n_f_sqrt = ET_data[:,1]
+        S_n_f_sqrt = S_n_f_sqrt/(u.Hz)**Fraction(1,2)
+        
+    elif inst_name == 'aLIGO': #aLIGO
+        load_name = 'aLIGODesign.txt'
+        load_location = load_directory + 'aLIGO/StrainFiles/' + load_name
+        
+        aLIGO_data = np.loadtxt(load_location)
+
+        [sample_x,sample_y,recalculate] = Get_Samples(inst_dict,var_x,sampleRate_x,var_y,sampleRate_y)
+                
+        fT = aLIGO_data[:,0]*u.Hz
+        S_n_f_sqrt = aLIGO_data[:,1]
+        S_n_f_sqrt = S_n_f_sqrt/(u.Hz)**Fraction(1,2)
+        
+    elif inst_name == 'NANOGrav': #NANOGrav 15 yr
+        [sample_x,sample_y,recalculate] = Get_Samples(inst_dict,var_x,sampleRate_x,var_y,sampleRate_y)
+
+        fT,S_n_f_sqrt = SnN.Get_PTAASD_v2(inst_var_dict,A_stoch_back=0.0)
+        
+    elif inst_name == 'SKA': #SKA (2030s)
+        [sample_x,sample_y,recalculate] = Get_Samples(inst_dict,var_x,sampleRate_x,var_y,sampleRate_y)
+
+        fT,S_n_f_sqrt = SnN.Get_PTAASD_v2(inst_var_dict,A_stoch_back=0.0)
+        
+    elif inst_name == 'LISA_ESA': #L3 proposal
+        [sample_x,sample_y,recalculate] = Get_Samples(inst_dict,var_x,sampleRate_x,var_y,sampleRate_y)
+
+        fT,S_n_f_sqrt = SnN.LisaSensitivity(inst_var_dict,Background=False)
+        S_n_f_sqrt = S_n_f_sqrt/(u.Hz)**Fraction(1,2)
+    else:
+        print('Whoops, not the right name!')
+
+    return fT,S_n_f_sqrt
 
 def calcPTAMonoSNR(source_var_dict,inst_var_dict,f_init):
     #SNR for a monochromatic source in a PTA
