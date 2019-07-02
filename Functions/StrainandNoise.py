@@ -169,17 +169,16 @@ def Get_approxResponseFunction(f,L):
     R_f = 3/10/(1+0.6*(f/f_L)**2) 
     return R_f
 
-def Get_TransferFunction(L,f_low=1e-5*u.Hz,f_high=1.0*u.Hz):
+def Load_TransferFunction():
     LISA_Transfer_Function_filedirectory = top_directory + '/LoadFiles/LISATransferFunction/'
     LISA_Transfer_Function_filename = 'transfer.dat' #np.loadtxting transfer function for Lisa noise curve
     LISA_Transfer_Function_filelocation = LISA_Transfer_Function_filedirectory + LISA_Transfer_Function_filename
     LISA_Transfer_Function_data = np.loadtxt(LISA_Transfer_Function_filelocation)
+    return LISA_Transfer_Function_data
 
-    try:
-        if L.unit != 'm':
-            L = L*u.m
-    except:
-        L = L*u.m
+def Get_TransferFunction(L,f_low=1e-5*u.Hz,f_high=1.0*u.Hz,reload_T=True,LISA_Transfer_Function_data=None):
+    if reload_T == True:
+        LISA_Transfer_Function_data = Load_TransferFunction()
 
     fc = const.c/(2*L)  #light round trip freq
     LISA_Transfer_Function_f = fc*LISA_Transfer_Function_data[:,0]
@@ -191,7 +190,7 @@ def Get_TransferFunction(L,f_low=1e-5*u.Hz,f_high=1.0*u.Hz):
     LISA_Transfer_Function_f = LISA_Transfer_Function_f[idx_f_5:idx_f_1]
     return [LISA_Transfer_Function_f,LISA_Transfer_Function]
 
-def NeilSensitivity(inst_var_dict,Background=True):
+def NeilSensitivity(inst_var_dict,Background=True,reload_T=True,T_data=None):
     for inst_name, inst_dict in inst_var_dict.items():
         for var_name, var_dict in inst_dict.items():
             if var_name == 'L':
@@ -201,7 +200,7 @@ def NeilSensitivity(inst_var_dict,Background=True):
             elif var_name == 'S_oms':
                 S_oms = var_dict['val']
 
-    f,T = Get_TransferFunction(L)
+    f,T = Get_TransferFunction(L,reload_T=reload_T,LISA_Transfer_Function_data=T_data)
 
     #Uses Calculation described by Neil Cornish (unpublished)
     f_L = const.c/2/np.pi/L #Transfer frequency
@@ -219,7 +218,7 @@ def NeilSensitivity(inst_var_dict,Background=True):
     ASD = Get_ASD_from_PSD_LISA(f,T,P_acc_term,P_oms,L,Norm=10/3,Background=Background)
     return f,ASD
 
-def LisaSensitivity(inst_var_dict,Background=True):
+def LisaSensitivity(inst_var_dict,Background=True,reload_T=True,T_data=None):
     for inst_name, inst_dict in inst_var_dict.items():
         for var_name, var_dict in inst_dict.items():
             if var_name == 'L':
@@ -235,14 +234,14 @@ def LisaSensitivity(inst_var_dict,Background=True):
             elif var_name == 'S_ims':
                 S_ims = var_dict['val']
 
-    f,T = Get_TransferFunction(L)
+    f,T = Get_TransferFunction(L,reload_T=reload_T,LISA_Transfer_Function_data=T_data)
 
     P_acc = S_acc**2*(1+(S_acc_low_knee/f)**2)*(1+(f/(S_acc_high_knee))**4)/(2*np.pi*f)**4 #Acceleration Noise 
     P_ims = S_ims**2*(1+(S_oms_knee/f)**4) #Displacement noise of the interferometric TM--to-TM 
     ASD = Get_ASD_from_PSD_LISA(f,T,P_acc,P_ims,L,Background=Background)
     return f,ASD
 
-def MartinSensitivity(inst_var_dict,Background=True):
+def MartinSensitivity(inst_var_dict,Background=True,reload_T=True,T_data=None):
     for inst_name, inst_dict in inst_var_dict.items():
         for var_name, var_dict in inst_dict.items():
             if var_name == 'L':
@@ -262,7 +261,7 @@ def MartinSensitivity(inst_var_dict,Background=True):
             elif var_name == 'S_acc_high':
                 S_acc_high = var_dict['val']
 
-    f,T = Get_TransferFunction(L)
+    f,T = Get_TransferFunction(L,reload_T=reload_T,LISA_Transfer_Function_data=T_data)
 
     P_ims = S_sci**2+2*S_loc**2+S_other**2
     P_acc = ((S_acc_low)**2*((S_acc_low_knee/f)**10 + (S_acc_high_knee/f)**2) + (S_acc_high)**2)/(2*np.pi*f)**4   #red below 1e-4, white above
@@ -278,6 +277,7 @@ def Sgal4yr(f):
     g = 1680
     f_k = 0.00113
     return A*np.exp(-(f.value**a)+(b*f.value*np.sin(k*f.value)))*(f.value**(-7/3))*(1 + np.tanh(g*(f_k-f.value))) #White Dwarf Background Noise
+
 
 def Get_CharStrain(Vars,f,h):
     [f,h] = StrainConv(Vars,f,h)

@@ -62,7 +62,7 @@ def checkFreqEvol(source_var_dict,T_obs,f_init):
     else:
         return f_T_obs, False
 
-def getSNRMatrix(source_var_dict,inst_var_dict,var_x,sampleRate_x,var_y,sampleRate_y):
+def getSNRMatrix(source_var_dict,inst_var_dict,var_x,sampleRate_x,var_y,sampleRate_y,Background=False):
     # # Setting Up SNR Calculation
     # Uses the variable given and the data range to sample the space either logrithmically or linearly based on the 
     # selection of variables. Then it computes the SNR for each value.
@@ -75,21 +75,17 @@ def getSNRMatrix(source_var_dict,inst_var_dict,var_x,sampleRate_x,var_y,sampleRa
         initVars.append(source_var_dict[name]['val'])
     [phenomD_f,phenomD_h] = SnN.Get_Waveform(initVars)
 
+    for inst_name_tmp,inst_dict_tmp in inst_var_dict.items():
+        inst_name = inst_name_tmp
+        inst_dict = inst_dict_tmp
+
     #Get Samples for source variables (will return None if they arent var_x or var_y)
     [sample_x,sample_y,recalculate_strain] = Get_Samples(source_var_dict,var_x,sampleRate_x,var_y,sampleRate_y)
     #Get instrument noise and frequency
-    [fT,S_n_f_sqrt] = Model_Selection(inst_var_dict)
+    [fT,S_n_f_sqrt] = Model_Selection(inst_var_dict,Background)
 
-    #Get T_obs for later and the instrument name and its corresponding dictionary
-    T_obs = 0.0
-    for inst_name_tmp, inst_dict_tmp in inst_var_dict.items():
-        inst_name = inst_name_tmp
-        inst_dict = inst_dict_tmp
-        for var_name,var_dict in inst_dict_tmp.items():
-            if var_name == 'Tobs':
-                T_obs += var_dict['val']
 
-    #Check if either sample is not a source variable, if not use instument samples
+    #Check if either sample is not a source variable, if not use instrument samples
     #Very sloppy way of doing it...
     recalculate_noise = 'neither' #Don't need to update inst_var_dict
     try: 
@@ -111,6 +107,9 @@ def getSNRMatrix(source_var_dict,inst_var_dict,var_x,sampleRate_x,var_y,sampleRa
     except:
         pass   
 
+    #Make sure samples have the correct astropy units
+    [sample_x,sample_y] = Handle_Units(sample_x,var_x,sample_y,var_y)
+
     #Get optimal (highest sensitivity) frequency
     f_opt = fT[np.argmin(S_n_f_sqrt)]
 
@@ -121,6 +120,7 @@ def getSNRMatrix(source_var_dict,inst_var_dict,var_x,sampleRate_x,var_y,sampleRa
     
     for i in range(sampleSize_x):
         for j in range(sampleSize_y):
+
             if recalculate_noise == 'x':
                 inst_var_dict[inst_name][var_x]['val'] = sample_x[i]
                 source_var_dict[var_y]['val'] = sample_y[j]
@@ -136,9 +136,20 @@ def getSNRMatrix(source_var_dict,inst_var_dict,var_x,sampleRate_x,var_y,sampleRa
             
             if recalculate_noise != 'neither':
                 #Recalculate noise curves if something is varied
-                [fT,S_n_f_sqrt] = Model_Selection(inst_var_dict)
-            if i >= 1 and j >= 1 and recalculate_noise != 'both':
-                #only recalulate strain if necessary (otherwise leave it at the original values)
+                if inst_name.split('_')[0] == 'LISA' and (i==0 and j==0): #Don't reload Transfer Function every time
+                    reload_T = True
+                    LISA_Transfer_Function_data = SnN.Load_TransferFunction()
+                elif inst_name.split('_')[0] == 'LISA' and (i!=0 or j!=0): #Already loaded Transfer Function
+                    reload_T = False
+                else: # Doesn't have a transfer function
+                    LISA_Transfer_Function_data = None
+                    reload_T = False
+                [fT,S_n_f_sqrt] = Model_Selection(inst_var_dict,Background,reload_T=reload_T,T_data=LISA_Transfer_Function_data)
+            if recalculate_noise != 'both' or (recalculate_noise == 'neither' and i==0 and j==0) or var_x == 'Tobs' or var_y == 'Tobs':
+                '''Only recalulate strain if necessary (otherwise leave it at the original values)
+                    If it is the first iteration, calculate strain
+                    If one of the varibles are Tobs, need to recalculate'''
+                T_obs = inst_var_dict[inst_name]['Tobs']['val']
                 #if ismono f_init=f_opt, else f_init=f_T_obs
                 f_init, ismono = checkFreqEvol(source_var_dict,T_obs,f_opt)
                 if ismono:
@@ -157,14 +168,18 @@ def getSNRMatrix(source_var_dict,inst_var_dict,var_x,sampleRate_x,var_y,sampleRa
     return [sample_x,sample_y,SNRMatrix]
 
 def Get_Samples(sup_dict,var_x,sampleRate_x,var_y,sampleRate_y):
+    ''' Takes in a dictionary (either for the instrument or source), and the variables
+        and sample rates desired in the SNR matrix. The function uses that to create a
+        sample space for the variable either in linear space (for q,x1,or x2) or logspace
+        for everything else.'''
     sample_x = None
     sample_y = None
     recalculate_strain = False
 
     for var_name,var_dict in sup_dict.items():
         if var_name == var_x:
-            if len(var_dict) == 3:
-                if var_x == 'q' or var_x == 'chi1' or var_x == 'chi2':
+            if len(var_dict) == 3: #If the variable has 'val','min',and 'max' dictionary attributes
+                if var_x == 'q' or var_x == 'chi1' or var_x == 'chi2' or var_x == 'Tobs':
                     #Sample in linear space for mass ratio and spins
                     sample_x = np.linspace(sup_dict[var_x]['min'],sup_dict[var_x]['max'],sampleRate_x)
                     recalculate_strain = True #Must recalculate the waveform at each point
@@ -177,11 +192,17 @@ def Get_Samples(sup_dict,var_x,sampleRate_x,var_y,sampleRate_y):
                         sample_x = np.logspace(np.log10(sup_dict[var_x]['min']),np.log10(sup_dict[var_x]['max']),sampleRate_x)
             print('x var: ',var_name)
         if var_name == var_y:
-            if len(var_dict) == 3:
+            if len(var_dict) == 3: #If the variable has 'val','min',and 'max' dictionary attributes
                 if var_y == 'q' or var_y == 'chi1' or var_y == 'chi2':
                     #Sample in linear space for mass ratio and spins
                     sample_y = np.linspace(sup_dict[var_y]['min'],sup_dict[var_y]['max'],sampleRate_y)
                     recalculate_strain = True #Must recalculate the waveform at each point
+                elif var_y == 'Tobs':
+                    #sample in linear space
+                    try:
+                        sample_y = np.linspace(sup_dict[var_y]['min'].value,sup_dict[var_y]['max'].value,sampleRate_y)
+                    except:
+                        sample_y = np.linspace(sup_dict[var_y]['min'],sup_dict[var_y]['max'],sampleRate_y)
                 else:
                     #Sample in log space for any other variables 
                     #Need exception for astropy variables
@@ -192,7 +213,12 @@ def Get_Samples(sup_dict,var_x,sampleRate_x,var_y,sampleRate_y):
             print('y var: ',var_name)
     return sample_x,sample_y,recalculate_strain
 
-def Model_Selection(inst_var_dict):
+def Model_Selection(inst_var_dict,Background,reload_T=True,T_data=None):
+    '''Uses inst_var_dict (the instrument dictionary) to calculate the frequency
+        and amplitude spectral density corresponding to the detector's name in the
+        dictionary
+    '''
+
     #Get the name of the instrument
     if len(inst_var_dict) == 1:
         inst_name = list(inst_var_dict.keys())[0]
@@ -201,14 +227,12 @@ def Model_Selection(inst_var_dict):
         inst_name = 'SKA'
         print('Nothing Yet.')
 
-    inst_dict = list(inst_var_dict.values())[0]
-
     if inst_name == 'LISA_Neil': #Robson,Cornish,and Liu 2018, LISA (https://arxiv.org/pdf/1803.01944.pdf)
-        fT,S_n_f_sqrt = SnN.NeilSensitivity(inst_var_dict)
+        fT,S_n_f_sqrt = SnN.NeilSensitivity(inst_var_dict,Background=Background,reload_T=reload_T,T_data=T_data)
         S_n_f_sqrt = S_n_f_sqrt/(u.Hz)**Fraction(1,2)
         
     elif inst_name == 'LISA_Martin': #Martin 2016: LISA Calculation without pathfinder correction (2016 model)
-        fT,S_n_f_sqrt = SnN.MartinSensitivity(inst_var_dict)
+        fT,S_n_f_sqrt = SnN.MartinSensitivity(inst_var_dict,Background=Background,reload_T=reload_T,T_data=T_data)
         S_n_f_sqrt = S_n_f_sqrt/(u.Hz)**Fraction(1,2)
         
     elif inst_name == 'ET': #Einstein Telescope
@@ -232,18 +256,50 @@ def Model_Selection(inst_var_dict):
         S_n_f_sqrt = S_n_f_sqrt/(u.Hz)**Fraction(1,2)
         
     elif inst_name == 'NANOGrav': #NANOGrav 15 yr
+        ###############
+        #NEED TO FIX BACKGROUND HARD CODING
+        ###############
         fT,S_n_f_sqrt = SnN.Get_PTAASD_v2(inst_var_dict,A_stoch_back=0.0)
         
     elif inst_name == 'SKA': #SKA (2030s)
+        ###############
+        #NEED TO FIX BACKGROUND HARD CODING
+        ###############
         fT,S_n_f_sqrt = SnN.Get_PTAASD_v2(inst_var_dict,A_stoch_back=0.0)
         
     elif inst_name == 'LISA_ESA': #L3 proposal
-        fT,S_n_f_sqrt = SnN.LisaSensitivity(inst_var_dict,Background=False)
+        ###############
+        #NEED TO FIX BACKGROUND HARD CODING
+        ###############
+        fT,S_n_f_sqrt = SnN.LisaSensitivity(inst_var_dict,Background=Background,reload_T=reload_T,T_data=T_data)
         S_n_f_sqrt = S_n_f_sqrt/(u.Hz)**Fraction(1,2)
     else:
         print('Whoops, not the right name!')
 
     return fT,S_n_f_sqrt
+
+def Handle_Units(sample_x,var_x,sample_y,var_y):
+    '''Since I am using astropy units, I need to update units on the selected samples'''
+    #Handle x variables
+    if var_x == 'L' or var_x == 'S_oms' or var_x == 'S_sci' or var_x == 'S_loc' or var_x == 'S_other' or var_x == 'S_ims':
+        sample_x = sample_x*u.m
+    elif var_x == 'Tobs' or var_x == 'rms':
+        sample_x = sample_x*u.s
+    elif var_x == 'S_acc' or var_x == 'S_acc_low' or var_x == 'S_acc_high' or var_x == 'S_oms_knee':
+        sample_x = sample_x*u.m/u.s/u.s
+    elif var_x == 'S_acc_low_knee' or var_x == 'S_acc_high_knee' or var_x == 'cadence':
+        sample_x = sample_x/u.s
+    #Handle y variables
+    if var_y == 'L' or var_y == 'S_oms' or var_y == 'S_sci' or var_y == 'S_loc' or var_y == 'S_other' or var_y == 'S_ims':
+        sample_y = sample_y*u.m
+    elif var_y == 'Tobs' or var_y == 'rms':
+        sample_y = sample_y*u.s
+    elif var_y == 'S_acc' or var_y == 'S_acc_low' or var_y == 'S_acc_high' or var_y == 'S_oms_knee':
+        sample_y = sample_y*u.m/u.s/u.s
+    elif var_y == 'S_acc_low_knee' or var_y == 'S_acc_high_knee' or var_y == 'cadence':
+        sample_y = sample_y/u.s
+
+    return sample_x,sample_y
 
 def calcPTAMonoSNR(source_var_dict,inst_var_dict,f_init):
     #SNR for a monochromatic source in a PTA
@@ -398,6 +454,16 @@ def plotSNR(source_var_dict,inst_var_dict,var_x,sample_x,var_y,sample_y,SNRMatri
         ylabel_min = inst_var_dict[inst_name][var_y]['min'].value
         ylabel_max = inst_var_dict[inst_name][var_y]['max'].value
 
+    #Can't take log of astropy united variables
+    try:
+        tmp_sample_x = np.log10(sample_x)
+    except:
+        sample_x = sample_x.value
+    try:
+        tmp_sample_y = np.log10(sample_y)
+    except:
+        sample_y = sample_y.value
+
     #########################
     #Make the Contour Plots
     fig, ax = plt.subplots(figsize=figsize)
@@ -423,7 +489,7 @@ def plotSNR(source_var_dict,inst_var_dict,var_x,sample_x,var_y,sample_y,SNRMatri
         ax.set_xticklabels(x_labels,fontsize = axissize)
         ax.set_yticks(np.log10(y_labels))
         ax.set_yticklabels(np.log10(y_labels),fontsize = axissize)
-    elif (var_y != 'q' or var_y != 'chi1' or var_y != 'chi2') and (var_x != 'q' and var_x != 'chi1' and var_x != 'chi2'):
+    else:
         CS1 = ax.contourf(np.log10(sample_x),np.log10(sample_y),logSNR,logLevels,cmap = colormap)
         ax.set_xlim(np.log10(xlabel_min),np.log10(xlabel_max))
         ax.set_ylim(np.log10(ylabel_min),np.log10(ylabel_max))
