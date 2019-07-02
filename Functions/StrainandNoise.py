@@ -58,9 +58,9 @@ def Get_PTAPSD(inst_var_dict,nfreqs=int(1e3),A_stoch_back=4e-16):
     cadence = []
     ndetectors = 0
     #Unpacking dictionary
-    for pta_name, pta_dict in inst_var_dict.items():
+    for inst_name, inst_dict in inst_var_dict.items():
         ndetectors += 1
-        for var_name,var_dict in pta_dict.items():
+        for var_name,var_dict in inst_dict.items():
             if var_name == 'Tobs':
                 T_obs.append(var_dict['val'])
             elif var_name == 'rms':
@@ -113,9 +113,9 @@ def Get_PTAstrain(inst_var_dict,nfreqs=int(1e3)):
     cadence = []
     ndetectors = 0
     #Unpacking dictionary
-    for pta_name, pta_dict in inst_var_dict.items():
+    for inst_name, inst_dict in inst_var_dict.items():
         ndetectors += 1
-        for var_name,var_dict in pta_dict.items():
+        for var_name,var_dict in inst_dict.items():
             if var_name == 'Tobs':
                 T_obs.append(var_dict['val'])
             elif var_name == 'rms':
@@ -124,7 +124,7 @@ def Get_PTAstrain(inst_var_dict,nfreqs=int(1e3)):
                 N_p.append(var_dict['val'])
             elif var_name == 'cadence':
                 cadence.append(var_dict['val'])
-                
+
     #Equation 5 from Lam,M.T. 2018 https://arxiv.org/abs/1808.10071
     P_w_tot = 0
     T_obs_tot = 0
@@ -174,6 +174,13 @@ def Get_TransferFunction(L,f_low=1e-5*u.Hz,f_high=1.0*u.Hz):
     LISA_Transfer_Function_filename = 'transfer.dat' #np.loadtxting transfer function for Lisa noise curve
     LISA_Transfer_Function_filelocation = LISA_Transfer_Function_filedirectory + LISA_Transfer_Function_filename
     LISA_Transfer_Function_data = np.loadtxt(LISA_Transfer_Function_filelocation)
+
+    try:
+        if L.unit != 'm':
+            L = L*u.m
+    except:
+        L = L*u.m
+
     fc = const.c/(2*L)  #light round trip freq
     LISA_Transfer_Function_f = fc*LISA_Transfer_Function_data[:,0]
 
@@ -185,13 +192,14 @@ def Get_TransferFunction(L,f_low=1e-5*u.Hz,f_high=1.0*u.Hz):
     return [LISA_Transfer_Function_f,LISA_Transfer_Function]
 
 def NeilSensitivity(inst_var_dict,Background=True):
-    for var_name, var_dict in inst_var_dict.items():
-        if var_name == 'L':
-            L = var_dict['val']
-        elif var_name == 'S_acc':
-            S_acc = var_dict['val']
-        elif var_name == 'S_oms':
-            S_oms = var_dict['val']
+    for inst_name, inst_dict in inst_var_dict.items():
+        for var_name, var_dict in inst_dict.items():
+            if var_name == 'L':
+                L = var_dict['val']
+            elif var_name == 'S_acc':
+                S_acc = var_dict['val']
+            elif var_name == 'S_oms':
+                S_oms = var_dict['val']
 
     f,T = Get_TransferFunction(L)
 
@@ -212,19 +220,21 @@ def NeilSensitivity(inst_var_dict,Background=True):
     return f,ASD
 
 def LisaSensitivity(inst_var_dict,Background=True):
-    for var_name, var_dict in inst_var_dict.items():
-        if var_name == 'L':
-            L = var_dict['val']
-        elif var_name == 'S_oms_knee':
-            S_oms_knee = var_dict['val']
-        elif var_name == 'S_acc_low_knee':
-            S_acc_low_knee = var_dict['val']
-        elif var_name == 'S_acc_high_knee':
-            S_acc_high_knee = var_dict['val']
-        elif var_name == 'S_acc':
-            S_acc = var_dict['val']
-        elif var_name == 'S_ims':
-            S_ims = var_dict['val']
+    for inst_name, inst_dict in inst_var_dict.items():
+        for var_name, var_dict in inst_dict.items():
+            if var_name == 'L':
+                L = var_dict['val']
+            elif var_name == 'S_oms_knee':
+                S_oms_knee = var_dict['val']
+            elif var_name == 'S_acc_low_knee':
+                S_acc_low_knee = var_dict['val']
+            elif var_name == 'S_acc_high_knee':
+                S_acc_high_knee = var_dict['val']
+            elif var_name == 'S_acc':
+                S_acc = var_dict['val']
+            elif var_name == 'S_ims':
+                S_ims = var_dict['val']
+
     f,T = Get_TransferFunction(L)
 
     P_acc = S_acc**2*(1+(S_acc_low_knee/f)**2)*(1+(f/(S_acc_high_knee))**4)/(2*np.pi*f)**4 #Acceleration Noise 
@@ -233,23 +243,24 @@ def LisaSensitivity(inst_var_dict,Background=True):
     return f,ASD
 
 def MartinSensitivity(inst_var_dict,Background=True):
-    for var_name, var_dict in inst_var_dict.items():
-        if var_name == 'L':
-            L = var_dict['val']
-        elif var_name == 'S_sci':
-            S_sci = var_dict['val']
-        elif var_name == 'S_loc':
-            S_loc = var_dict['val']
-        elif var_name == 'S_other':
-            S_other = var_dict['val']
-        elif var_name == 'S_acc_low_knee':
-            S_acc_low_knee = var_dict['val']
-        elif var_name == 'S_acc_high_knee':
-            S_acc_high_knee = var_dict['val']
-        elif var_name == 'S_acc_low':
-            S_acc_low = var_dict['val']
-        elif var_name == 'S_acc_high':
-            S_acc_high = var_dict['val']
+    for inst_name, inst_dict in inst_var_dict.items():
+        for var_name, var_dict in inst_dict.items():
+            if var_name == 'L':
+                L = var_dict['val']
+            elif var_name == 'S_sci':
+                S_sci = var_dict['val']
+            elif var_name == 'S_loc':
+                S_loc = var_dict['val']
+            elif var_name == 'S_other':
+                S_other = var_dict['val']
+            elif var_name == 'S_acc_low_knee':
+                S_acc_low_knee = var_dict['val']
+            elif var_name == 'S_acc_high_knee':
+                S_acc_high_knee = var_dict['val']
+            elif var_name == 'S_acc_low':
+                S_acc_low = var_dict['val']
+            elif var_name == 'S_acc_high':
+                S_acc_high = var_dict['val']
 
     f,T = Get_TransferFunction(L)
 
