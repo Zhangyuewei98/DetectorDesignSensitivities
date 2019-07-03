@@ -62,7 +62,7 @@ def checkFreqEvol(source_var_dict,T_obs,f_init):
     else:
         return f_T_obs, False
 
-def getSNRMatrix(source_var_dict,inst_var_dict,var_x,sampleRate_x,var_y,sampleRate_y,Background=False):
+def getSNRMatrix(source_var_dict,inst_var_dict,var_x,sampleRate_x,var_y,sampleRate_y,diff_model,Background=False):
     # # Setting Up SNR Calculation
     # Uses the variable given and the data range to sample the space either logrithmically or linearly based on the 
     # selection of variables. Then it computes the SNR for each value.
@@ -84,6 +84,24 @@ def getSNRMatrix(source_var_dict,inst_var_dict,var_x,sampleRate_x,var_y,sampleRa
     #Get instrument noise and frequency
     [fT,S_n_f_sqrt] = Model_Selection(inst_var_dict,Background)
 
+    if diff_model <= 4:
+        if diff_model == 0:
+            diff_name = 'diff0002'
+        elif diff_model == 1:
+            diff_name = 'diff0114'
+        elif diff_model == 2:
+            diff_name = 'diff0178'
+        elif diff_model == 3:
+            diff_name = 'diff0261'
+        elif diff_model == 4:
+            diff_name = 'diff0303'
+        diff_filename = diff_name + '.dat'
+        diff_filelocation = top_directory + '/LoadFiles/DiffStrain/EOBdiff/' + diff_filename
+        diff_data = np.loadtxt(diff_filelocation)
+        diff_t = diff_data[:,0]*u.s
+        diff_hp = diff_data[:,1]
+        diff_hc = diff_data[:,2] 
+        [diff_f,diff_h_f] = SnN.Get_hf_from_hcross_hplus(diff_t,diff_hc,diff_hp)
 
     #Check if either sample is not a source variable, if not use instrument samples
     #Very sloppy way of doing it...
@@ -162,18 +180,20 @@ def getSNRMatrix(source_var_dict,inst_var_dict,var_x,sampleRate_x,var_y,sampleRa
                 T_obs = inst_var_dict[inst_name]['Tobs']['val']
                 #if ismono f_init=f_opt, else f_init=f_T_obs
                 f_init, ismono = checkFreqEvol(source_var_dict,T_obs,f_opt)
-                if ismono:
+                if ismono and model != 6:
                     if inst_name == 'NANOGrav' or inst_name == 'SKA': #Use PTA calculation
                         SNRMatrix[j,i] = calcPTAMonoSNR(source_var_dict,inst_var_dict,f_init)
                     else:
                         SNRMatrix[j,i] = calcMonoSNR(source_var_dict,fT,S_n_f_sqrt,T_obs,f_init)
+                elif diff_model <= 4: # Model for the diff EOB waveform/SNR calculation
+                    SNRMatrix[j,i] = calcDiffSNR(source_var_dict,fT,S_n_f_sqrt,f_init,diff_f,diff_h_f)
                 else:
                     if recalculate_strain == True: #If we need to calculate the waveform everytime
                         newVars = []
                         for name in source_var_dict.keys():
                             newVars.append(source_var_dict[name]['val'])
                         [phenomD_f,phenomD_h] = SnN.Get_Waveform(newVars)
-                    SNRMatrix[j,i] = calcChirpSNR(source_var_dict,fT,S_n_f_sqrt,T_obs,f_init,phenomD_f,phenomD_h,recalculate_strain)
+                    SNRMatrix[j,i] = calcChirpSNR(source_var_dict,fT,S_n_f_sqrt,f_init,phenomD_f,phenomD_h,recalculate_strain)
 
     return [sample_x,sample_y,SNRMatrix]
 
@@ -343,7 +363,7 @@ def calcMonoSNR(source_var_dict,fT,S_n_f_sqrt,T_obs,f_init):
     SNR = np.sqrt(h_gw**2/S_n_f[indxfgw])
     return SNR
 
-def calcChirpSNR(source_var_dict,fT,S_n_f_sqrt,T_obs,f_init,phenomD_f,phenomD_h,recalculate):
+def calcChirpSNR(source_var_dict,fT,S_n_f_sqrt,f_init,phenomD_f,phenomD_h,recalculate):
     #Calculates evolving source using non-precessing binary black hole waveform model IMRPhenomD
     #See Husa et al. 2016 (https://arxiv.org/abs/1508.07250) and Khan et al. 2016 (https://arxiv.org/abs/1508.07253)
     #Uses an interpolated method to align waveform and instrument noise, then integrates 
@@ -387,7 +407,7 @@ def calcChirpSNR(source_var_dict,fT,S_n_f_sqrt,T_obs,f_init,phenomD_f,phenomD_h,
     SNR = np.sqrt(SNRsqrd)
     return SNR
 
-def calcDiffSNR(source_var_dict,fT,S_n_f_sqrt,T_obs,f_init,diff_f,diff_h):
+def calcDiffSNR(source_var_dict,fT,S_n_f_sqrt,f_init,diff_f,diff_h):
     #Calculates the SNR loss from the difference in EOB waveforms and numerical relativity.
     # The strain is from Sean McWilliams in a private communication.
     #Uses an interpolated method to align waveform and instrument noise, then integrates 
