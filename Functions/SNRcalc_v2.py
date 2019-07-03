@@ -154,7 +154,7 @@ def getSNRMatrix(source_var_dict,inst_var_dict,var_x,sampleRate_x,var_y,sampleRa
             
             if recalculate_noise != 'neither':
                 #Recalculate noise curves if something is varied
-                if inst_name.split('_')[0] == 'LISA' and (i==0 and j==0): #Don't reload Transfer Function every time
+                if inst_name.split('_')[0] == 'LISA' and (i==0 and j==0): #Don't reload LISA Transfer Function every time
                     reload_data = True
                     Instrument_data = SnN.Load_TransferFunction()
                 elif inst_name == 'ET' and (i==0 and j==0): #Load ET data once
@@ -167,12 +167,13 @@ def getSNRMatrix(source_var_dict,inst_var_dict,var_x,sampleRate_x,var_y,sampleRa
                     load_location = load_directory + 'aLIGO/StrainFiles/' + load_name
                     Instrument_data = np.loadtxt(load_location)
                     reload_data = False
-                elif inst_name.split('_')[0] == 'LISA' or inst_name == 'ET' or inst_name == 'aLIGO' and (i!=0 or j!=0): #Already loaded Transfer Function
+                elif inst_name.split('_')[0] == 'LISA' or inst_name == 'ET' or inst_name == 'aLIGO' and (i!=0 or j!=0): #Already loaded Instrument data
                     reload_data = False
                 else: # Doesn't have a transfer function
                     Instrument_data = None
                     reload_data = False
                 [fT,S_n_f_sqrt] = Model_Selection(inst_var_dict,Background,reload_data=reload_data,I_data=Instrument_data)
+
             if recalculate_noise != 'both' or (recalculate_noise == 'neither' and i==0 and j==0) or var_x == 'Tobs' or var_y == 'Tobs':
                 '''Only recalulate strain if necessary (otherwise leave it at the original values)
                     If it is the first iteration, calculate strain
@@ -180,14 +181,15 @@ def getSNRMatrix(source_var_dict,inst_var_dict,var_x,sampleRate_x,var_y,sampleRa
                 T_obs = inst_var_dict[inst_name]['Tobs']['val']
                 #if ismono f_init=f_opt, else f_init=f_T_obs
                 f_init, ismono = checkFreqEvol(source_var_dict,T_obs,f_opt)
-                if ismono and model != 6:
+
+                if ismono and diff_model > 4: #Monochromatic Source
                     if inst_name == 'NANOGrav' or inst_name == 'SKA': #Use PTA calculation
                         SNRMatrix[j,i] = calcPTAMonoSNR(source_var_dict,inst_var_dict,f_init)
                     else:
                         SNRMatrix[j,i] = calcMonoSNR(source_var_dict,fT,S_n_f_sqrt,T_obs,f_init)
                 elif diff_model <= 4: # Model for the diff EOB waveform/SNR calculation
                     SNRMatrix[j,i] = calcDiffSNR(source_var_dict,fT,S_n_f_sqrt,f_init,diff_f,diff_h_f)
-                else:
+                else: #Chirping Source
                     if recalculate_strain == True: #If we need to calculate the waveform everytime
                         newVars = []
                         for name in source_var_dict.keys():
