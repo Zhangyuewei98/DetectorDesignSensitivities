@@ -182,13 +182,13 @@ def getSNRMatrix(source_var_dict,inst_var_dict,var_x,sampleRate_x,var_y,sampleRa
                 #if ismono f_init=f_opt, else f_init=f_T_obs
                 f_init, ismono = checkFreqEvol(source_var_dict,T_obs,f_opt)
 
-                if ismono and diff_model > 4: #Monochromatic Source
+                if ismono and diff_model > 4: #Monochromatic Source and not diff EOB SNR
                     if inst_name == 'NANOGrav' or inst_name == 'SKA': #Use PTA calculation
                         SNRMatrix[j,i] = calcPTAMonoSNR(source_var_dict,inst_var_dict,f_init)
                     else:
                         SNRMatrix[j,i] = calcMonoSNR(source_var_dict,fT,S_n_f_sqrt,T_obs,f_init)
                 elif diff_model <= 4: # Model for the diff EOB waveform/SNR calculation
-                    SNRMatrix[j,i] = calcDiffSNR(source_var_dict,fT,S_n_f_sqrt,f_init,diff_f,diff_h_f)
+                    SNRMatrix[j,i] = calcDiffSNR(source_var_dict,fT,S_n_f_sqrt,diff_f,diff_h_f)
                 else: #Chirping Source
                     if recalculate_strain == True: #If we need to calculate the waveform everytime
                         newVars = []
@@ -211,10 +211,16 @@ def Get_Samples(sup_dict,var_x,sampleRate_x,var_y,sampleRate_y):
     for var_name,var_dict in sup_dict.items():
         if var_name == var_x:
             if len(var_dict) == 3: #If the variable has 'val','min',and 'max' dictionary attributes
-                if var_x == 'q' or var_x == 'chi1' or var_x == 'chi2' or var_x == 'Tobs':
+                if var_x == 'q' or var_x == 'chi1' or var_x == 'chi2':
                     #Sample in linear space for mass ratio and spins
                     sample_x = np.linspace(sup_dict[var_x]['min'],sup_dict[var_x]['max'],sampleRate_x)
                     recalculate_strain = True #Must recalculate the waveform at each point
+                elif var_x == 'Tobs':
+                    #sample in linear space for instrument variables
+                    try:
+                        sample_x = np.linspace(sup_dict[var_x]['min'].value,sup_dict[var_x]['max'].value,sampleRate_x)
+                    except:
+                        sample_x = np.linspace(sup_dict[var_x]['min'],sup_dict[var_x]['max'],sampleRate_x)
                 else:
                     #Sample in log space for any other variables
                     #Need exception for astropy variables
@@ -230,7 +236,7 @@ def Get_Samples(sup_dict,var_x,sampleRate_x,var_y,sampleRate_y):
                     sample_y = np.linspace(sup_dict[var_y]['min'],sup_dict[var_y]['max'],sampleRate_y)
                     recalculate_strain = True #Must recalculate the waveform at each point
                 elif var_y == 'Tobs':
-                    #sample in linear space
+                    #sample in linear space for instrument variables
                     try:
                         sample_y = np.linspace(sup_dict[var_y]['min'].value,sup_dict[var_y]['max'].value,sampleRate_y)
                     except:
@@ -250,7 +256,6 @@ def Model_Selection(inst_var_dict,Background,reload_data=True,I_data=None):
         and amplitude spectral density corresponding to the detector's name in the
         dictionary
     '''
-
     #Get the name of the instrument
     if len(inst_var_dict) == 1:
         inst_name = list(inst_var_dict.keys())[0]
@@ -271,7 +276,7 @@ def Model_Selection(inst_var_dict,Background,reload_data=True,I_data=None):
         if reload_data == True:
             load_name = 'ET_D_data.txt'
             load_location = load_directory + 'EinsteinTelescope/StrainFiles/' + load_name
-            Instrument_data = np.loadtxt(load_location)
+            I_data = np.loadtxt(load_location)
         fT = I_data[:,0]*u.Hz
         S_n_f_sqrt = I_data[:,1]
         S_n_f_sqrt = S_n_f_sqrt/(u.Hz)**Fraction(1,2)
@@ -409,7 +414,7 @@ def calcChirpSNR(source_var_dict,fT,S_n_f_sqrt,f_init,phenomD_f,phenomD_h,recalc
     SNR = np.sqrt(SNRsqrd)
     return SNR
 
-def calcDiffSNR(source_var_dict,fT,S_n_f_sqrt,f_init,diff_f,diff_h):
+def calcDiffSNR(source_var_dict,fT,S_n_f_sqrt,diff_f,diff_h):
     #Calculates the SNR loss from the difference in EOB waveforms and numerical relativity.
     # The strain is from Sean McWilliams in a private communication.
     #Uses an interpolated method to align waveform and instrument noise, then integrates 
@@ -422,38 +427,31 @@ def calcDiffSNR(source_var_dict,fT,S_n_f_sqrt,f_init,diff_f,diff_h):
     S_n_f = S_n_f_sqrt**2 #Amplitude Spectral Density
     
     diff_f,diff_h = SnN.StrainConv(Vars,diff_f,diff_h)
-    #Only want to integrate from observed frequency (f(T_obs_before_merger)) till merger
-    indxfgw = np.abs(diff_f-f_init).argmin()
-    if indxfgw >= len(diff_f)-1:
-        #If the SMBH has already merged set the SNR to ~0
-        return 1e-30  
-    else:
-        f_cut = diff_f[indxfgw:]
-        h_cut = diff_h[indxfgw:]
 
     #################################
     #Interpolate the Strain Noise Spectral Density to only the frequencies the
     #strain runs over
     #Set Noise to 1e30 outside of signal frequencies
     S_n_f_interp_old = interp.interp1d(np.log10(fT.value),np.log10(S_n_f.value),kind='cubic',fill_value=30.0, bounds_error=False) 
-    S_n_f_interp_new = S_n_f_interp_old(np.log10(f_cut.value))
+    S_n_f_interp_new = S_n_f_interp_old(np.log10(diff_f.value))
     S_n_f_interp = 10**S_n_f_interp_new
 
     #CALCULATE SNR FOR BOTH NOISE CURVES
     denom = S_n_f_interp #Sky Averaged Noise Spectral Density
-    numer = f_cut*h_cut**2
+    numer = diff_f*diff_h**2
 
-    integral_consts = 16/5 # 4 or(4*4/5) from sky/inclination/polarization averaging
+    integral_consts = 4 #or(4*4/5) from sky/inclination/polarization averaging
 
     integrand = numer/denom
-    SNRsqrd = integral_consts*np.trapz(integrand.value,np.log(f_cut.value),axis=0) #SNR**2
+    SNRsqrd = integral_consts*np.trapz(integrand.value,np.log(diff_f.value),axis=0) #SNR**2
     SNR = np.sqrt(SNRsqrd)
     return SNR
 
-def plotSNR(source_var_dict,inst_var_dict,var_x,sample_x,var_y,sample_y,SNRMatrix):
+def plotSNR(source_var_dict,inst_var_dict,var_x,sample_x,var_y,sample_y,SNRMatrix,display=True,isitsavetime=False,figloc=None):
     '''Plots the SNR contours from calcSNR'''
     #Selects contour levels to separate sections into
-    contLevels = np.array([5,10, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7])
+    #contLevels = np.array([5,10, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7])
+    contLevels = np.array([1,3,5,10])
     logLevels = np.log10(contLevels)
     axissize = 14
     labelsize = 16
@@ -541,8 +539,14 @@ def plotSNR(source_var_dict,inst_var_dict,var_x,sample_x,var_y,sample_y,SNRMatri
     cbar.set_label(r'$SNR$',fontsize = labelsize)
     cbar.ax.tick_params(labelsize = axissize)
     cbar.ax.set_yticklabels([r'$10^{%i}$' %x if int(x) > 1 else r'$%i$' %(10**x) for x in logLevels])
+    
+    if display:
+        plt.show()
 
-    plt.show()
+    #########################
+    #Save Figure to File
+    if isitsavetime:
+        fig.savefig(figloc,bbox_inches='tight')
 
 def saveSNR(sample_x,sample_y,SNRMatrix,save_location,SNR_filename,sample_filename):
     #Save SNR Matrix
