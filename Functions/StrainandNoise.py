@@ -388,9 +388,9 @@ def Get_hf_from_hcross_hplus(t,h_cross,h_plus,interp_res='coarse',windowing='lef
     f_cut = 1.5e-1 #Cutoff frequency
     cut = np.abs(freqs-f_cut).argmin() #Cut off frequencies higher than a frequency
     #cut=int(len(freqs)*0.9) #Cut off percentage of frequencies
-    h_cross_f = h_cross_f[:cut]
-    h_plus_f = h_plus_f[:cut]
-    freqs = freqs[:cut]
+    h_cross_f = h_cross_f[1:cut]
+    h_plus_f = h_plus_f[1:cut]
+    freqs = freqs[1:cut]
     
     #Combine them for raw spectral power
     h_f = np.sqrt((np.abs(h_cross_f))**2 + (np.abs(h_plus_f))**2)

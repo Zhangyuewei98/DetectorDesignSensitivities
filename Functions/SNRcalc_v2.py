@@ -183,6 +183,7 @@ def getSNRMatrix(source_var_dict,inst_var_dict,var_x,sampleRate_x,var_y,sampleRa
                 f_init, ismono = checkFreqEvol(source_var_dict,T_obs,f_opt)
 
                 if ismono and diff_model > 4: #Monochromatic Source and not diff EOB SNR
+                    print('here')
                     if inst_name == 'NANOGrav' or inst_name == 'SKA': #Use PTA calculation
                         SNRMatrix[j,i] = calcPTAMonoSNR(source_var_dict,inst_var_dict,f_init)
                     else:
@@ -190,6 +191,7 @@ def getSNRMatrix(source_var_dict,inst_var_dict,var_x,sampleRate_x,var_y,sampleRa
                 elif diff_model <= 4: # Model for the diff EOB waveform/SNR calculation
                     SNRMatrix[j,i] = calcDiffSNR(source_var_dict,fT,S_n_f_sqrt,diff_f,diff_h_f)
                 else: #Chirping Source
+                    print('there')
                     if recalculate_strain == True: #If we need to calculate the waveform everytime
                         newVars = []
                         for name in source_var_dict.keys():
@@ -410,7 +412,7 @@ def calcChirpSNR(source_var_dict,fT,S_n_f_sqrt,f_init,phenomD_f,phenomD_h,recalc
     integral_consts = 16/5 # 4 or(4*4/5) from sky/inclination/polarization averaging
 
     integrand = numer/denom
-    SNRsqrd = integral_consts*np.trapz(integrand.value,np.log(f_cut.value),axis=0) #SNR**2
+    SNRsqrd = integral_consts*np.trapz(integrand.value,np.log10(f_cut.value),axis=0) #SNR**2
     SNR = np.sqrt(SNRsqrd)
     return SNR
 
@@ -424,34 +426,34 @@ def calcDiffSNR(source_var_dict,fT,S_n_f_sqrt,diff_f,diff_h):
     for name,sub_dict in source_var_dict.items():
         Vars.append(source_var_dict[name]['val'])
 
-    S_n_f = S_n_f_sqrt**2 #Amplitude Spectral Density
-    
+    h_n_f = np.sqrt(fT)*S_n_f_sqrt #characteristic strain Amplitude
+
     diff_f,diff_h = SnN.StrainConv(Vars,diff_f,diff_h)
 
     #################################
     #Interpolate the Strain Noise Spectral Density to only the frequencies the
     #strain runs over
     #Set Noise to 1e30 outside of signal frequencies
-    S_n_f_interp_old = interp.interp1d(np.log10(fT.value),np.log10(S_n_f.value),kind='cubic',fill_value=30.0, bounds_error=False) 
-    S_n_f_interp_new = S_n_f_interp_old(np.log10(diff_f.value))
-    S_n_f_interp = 10**S_n_f_interp_new
+    h_n_f_interp_old = interp.interp1d(np.log10(fT.value),np.log10(h_n_f.value),kind='cubic',fill_value=30.0, bounds_error=False) 
+    h_n_f_interp_new = h_n_f_interp_old(np.log10(diff_f.value))
+    h_n_f_interp = 10**h_n_f_interp_new
 
     #CALCULATE SNR FOR BOTH NOISE CURVES
-    denom = S_n_f_interp #Sky Averaged Noise Spectral Density
-    numer = diff_f*diff_h**2
+    denom = h_n_f_interp**2 #Sky Averaged Noise Spectral Density
+    numer = diff_h**2
 
-    integral_consts = 4 #or(4*4/5) from sky/inclination/polarization averaging
+    integral_consts = 4 # 4or(4*4/5) from sky/inclination/polarization averaging
 
     integrand = numer/denom
-    SNRsqrd = integral_consts*np.trapz(integrand.value,np.log(diff_f.value),axis=0) #SNR**2
+
+    SNRsqrd = integral_consts*np.trapz(integrand.value,np.log10(diff_f.value),axis=0) #SNR**2
     SNR = np.sqrt(SNRsqrd)
     return SNR
 
 def plotSNR(source_var_dict,inst_var_dict,var_x,sample_x,var_y,sample_y,SNRMatrix,display=True,isitsavetime=False,figloc=None):
     '''Plots the SNR contours from calcSNR'''
     #Selects contour levels to separate sections into
-    #contLevels = np.array([5,10, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7])
-    contLevels = np.array([1,3,5,10])
+    contLevels = np.array([5,10, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7,1e8,1e9])
     logLevels = np.log10(contLevels)
     axissize = 14
     labelsize = 16
