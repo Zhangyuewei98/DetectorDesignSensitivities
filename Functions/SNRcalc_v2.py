@@ -189,7 +189,7 @@ def getSNRMatrix(source_var_dict,inst_var_dict,var_x,sampleRate_x,var_y,sampleRa
                     else:
                         SNRMatrix[j,i] = calcMonoSNR(source_var_dict,fT,S_n_f_sqrt,T_obs,f_init)
                 elif diff_model <= 4: # Model for the diff EOB waveform/SNR calculation
-                    SNRMatrix[j,i] = calcDiffSNR(source_var_dict,fT,S_n_f_sqrt,diff_f,diff_h_f)
+                    SNRMatrix[j,i] = calcDiffSNR(source_var_dict,fT,S_n_f_sqrt,diff_f,diff_h_f,f_init)
                 else: #Chirping Source
                     print('there')
                     if recalculate_strain == True: #If we need to calculate the waveform everytime
@@ -416,7 +416,7 @@ def calcChirpSNR(source_var_dict,fT,S_n_f_sqrt,f_init,phenomD_f,phenomD_h,recalc
     SNR = np.sqrt(SNRsqrd)
     return SNR
 
-def calcDiffSNR(source_var_dict,fT,S_n_f_sqrt,diff_f,diff_h):
+def calcDiffSNR(source_var_dict,fT,S_n_f_sqrt,diff_f,diff_h,f_init):
     #Calculates the SNR loss from the difference in EOB waveforms and numerical relativity.
     # The strain is from Sean McWilliams in a private communication.
     #Uses an interpolated method to align waveform and instrument noise, then integrates 
@@ -430,30 +430,40 @@ def calcDiffSNR(source_var_dict,fT,S_n_f_sqrt,diff_f,diff_h):
 
     diff_f,diff_h = SnN.StrainConv(Vars,diff_f,diff_h)
 
+    #Only want to integrate from observed frequency (f(T_obs_before_merger)) till merger
+    indxfgw = np.abs(diff_f-f_init).argmin()
+    if indxfgw >= len(diff_f)-1:
+        #If the SMBH has already merged set the SNR to ~0
+        return 1e-30  
+    else:
+        f_cut = diff_f[indxfgw:]
+        h_cut = diff_h[indxfgw:]
+
     #################################
     #Interpolate the Strain Noise Spectral Density to only the frequencies the
     #strain runs over
     #Set Noise to 1e30 outside of signal frequencies
     h_n_f_interp_old = interp.interp1d(np.log10(fT.value),np.log10(h_n_f.value),kind='cubic',fill_value=30.0, bounds_error=False) 
-    h_n_f_interp_new = h_n_f_interp_old(np.log10(diff_f.value))
+    h_n_f_interp_new = h_n_f_interp_old(np.log10(f_cut.value))
     h_n_f_interp = 10**h_n_f_interp_new
 
     #CALCULATE SNR FOR BOTH NOISE CURVES
     denom = h_n_f_interp**2 #Sky Averaged Noise Spectral Density
-    numer = diff_h**2
+    numer = h_cut**2
 
     integral_consts = 4 # 4or(4*4/5) from sky/inclination/polarization averaging
 
     integrand = numer/denom
 
-    SNRsqrd = integral_consts*np.trapz(integrand.value,np.log10(diff_f.value),axis=0) #SNR**2
+    SNRsqrd = integral_consts*np.trapz(integrand.value,np.log10(f_cut.value),axis=0) #SNR**2
     SNR = np.sqrt(SNRsqrd)
     return SNR
 
-def plotSNR(source_var_dict,inst_var_dict,var_x,sample_x,var_y,sample_y,SNRMatrix,display=True,isitsavetime=False,figloc=None):
+def plotSNR(source_var_dict,inst_var_dict,var_x,sample_x,var_y,sample_y,SNRMatrix,display=True,dl_axis=False,isitsavetime=False,figloc=None):
     '''Plots the SNR contours from calcSNR'''
     #Selects contour levels to separate sections into
-    contLevels = np.array([5,10, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7,1e8,1e9])
+    #contLevels = np.array([5,10, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7,1e8,1e9])
+    contLevels = np.array([5,10, 1e2, 1e3, 1e4])
     logLevels = np.log10(contLevels)
     axissize = 14
     labelsize = 16
@@ -535,13 +545,28 @@ def plotSNR(source_var_dict,inst_var_dict,var_x,sample_x,var_y,sample_y,SNRMatri
     ax.set_xlabel(r'$M_{\rm tot}$ $[M_{\odot}]$',fontsize = labelsize)
     ax.set_ylabel(r'${\rm Redshift}$',fontsize = labelsize)
     ax.yaxis.set_label_coords(-.10,.5)
-    #########################
-    #Make colorbar
-    cbar = fig.colorbar(CS1)
+
+    #If true, display luminosity distance on right side of plot
+    if dl_axis:
+        #dists = np.array([1e-1,1,10,1e2,1e3,1e4])*u.Gpc
+        dists = np.array([1e-1,1,10,1e2])*u.Gpc 
+        distticks = [z_at_value(cosmo.luminosity_distance,dist) for dist in dists]
+        #Set other side y-axis for lookback time scalings
+        ax2 = ax.twinx()
+        ax2.contour(np.log10(sample_x),np.log10(sample_y),logSNR,logLevels,colors = 'k',alpha=0.0)
+        ax2.set_yticks(np.log10(distticks))
+        #ax2.set_yticklabels(['%f' %dist for dist in distticks],fontsize = axissize)
+        ax2.set_yticklabels([r'$10^{%i}$' %np.log10(dist) if np.abs(int(np.log10(dist))) > 1 else '{:g}'.format(dist) for dist in dists.value],fontsize = axissize)
+        ax2.set_ylabel(r'$D_{L}$ [Gpc]',fontsize=labelsize)
+        cbar = fig.colorbar(CS1,ax=(ax,ax2),pad=0.01)
+    else:
+        #########################
+        #Make colorbar
+        cbar = fig.colorbar(CS1)
     cbar.set_label(r'$SNR$',fontsize = labelsize)
     cbar.ax.tick_params(labelsize = axissize)
     cbar.ax.set_yticklabels([r'$10^{%i}$' %x if int(x) > 1 else r'$%i$' %(10**x) for x in logLevels])
-    
+
     if display:
         plt.show()
 
