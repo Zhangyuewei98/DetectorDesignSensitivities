@@ -462,8 +462,8 @@ def calcDiffSNR(source_var_dict,fT,S_n_f_sqrt,diff_f,diff_h,f_init):
 def plotSNR(source_var_dict,inst_var_dict,var_x,sample_x,var_y,sample_y,SNRMatrix,display=True,dl_axis=False,isitsavetime=False,figloc=None):
     '''Plots the SNR contours from calcSNR'''
     #Selects contour levels to separate sections into
-    #contLevels = np.array([5,10, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7,1e8,1e9])
-    contLevels = np.array([5,10, 1e2, 1e3, 1e4])
+    contLevels = np.array([5,10, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7,1e8,1e9])
+    #contLevels = np.array([5,10, 1e2, 1e3, 1e4])
     logLevels = np.log10(contLevels)
     axissize = 14
     labelsize = 16
@@ -548,8 +548,8 @@ def plotSNR(source_var_dict,inst_var_dict,var_x,sample_x,var_y,sample_y,SNRMatri
 
     #If true, display luminosity distance on right side of plot
     if dl_axis:
-        #dists = np.array([1e-1,1,10,1e2,1e3,1e4])*u.Gpc
-        dists = np.array([1e-1,1,10,1e2])*u.Gpc 
+        dists = np.array([1e-1,1,10,1e2,1e3,1e4])*u.Gpc
+        #dists = np.array([1e-1,1,10,1e2])*u.Gpc 
         distticks = [z_at_value(cosmo.luminosity_distance,dist) for dist in dists]
         #Set other side y-axis for lookback time scalings
         ax2 = ax.twinx()
