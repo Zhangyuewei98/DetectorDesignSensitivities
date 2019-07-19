@@ -305,8 +305,7 @@ def Get_MonoStrain(Vars,T_obs,f_init,fT,strain_const='Rosado'):
         a = 1+np.cos(inc)**2
         b = -2*np.cos(inc)
         A = 2*(const.c/DL)*(np.pi*fT[indxfgw])**(2./3.)*M_chirp**(5./3.)
-        #h_gw = A*np.sqrt(.5*(a**2+b**2))
-        h_gw = A*3
+        h_gw = A*np.sqrt(.5*(a**2+b**2))
     elif strain_const == 'Cornish':
         #Strain from Cornish et. al 2018 (eqn 27) https://arxiv.org/pdf/1803.01944.pdf
         #(ie. optimally oriented)

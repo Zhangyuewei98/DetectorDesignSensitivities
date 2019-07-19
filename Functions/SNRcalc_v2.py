@@ -52,12 +52,15 @@ def checkFreqEvol(source_var_dict,T_obs,f_init):
     M_redshifted_time = M*(1+z)*m_conv
     M_chirp = eta**(3/5)*M_redshifted_time
     
-    #f(t) from eqn 24 of Robson,Cornish,and Liu 2018 https://arxiv.org/abs/1803.01944
+    #from eqn 41 from Hazboun,Romano, and Smith (2019) https://arxiv.org/abs/1907.04341
     t_init = 5*(M_chirp)**(-5/3)*(8*np.pi*f_init)**(-8/3)
+    #f(t) from eqn 40
     f_evolve = 1./8./np.pi/M_chirp*(5*M_chirp/(t_init-T_obs))**(3./8.)
-    f_T_obs = 1./8./np.pi/M_chirp*(5*M_chirp/(T_obs))**(3./8.)
+    f_T_obs = 1./8./np.pi/M_chirp*(5*M_chirp/T_obs)**(3./8.)
+    #del(f) from eqn 42
+    delf = 1./8./np.pi/M_chirp*(5*M_chirp/t_init)**(3./8.)*(3*T_obs/8/t_init)
     
-    if (f_evolve-f_init) < (1/T_obs) and (t_init-T_obs) > 0:
+    if delf < (1/T_obs):
         return f_init, True
     else:
         return f_T_obs, False
@@ -183,7 +186,6 @@ def getSNRMatrix(source_var_dict,inst_var_dict,var_x,sampleRate_x,var_y,sampleRa
                 f_init, ismono = checkFreqEvol(source_var_dict,T_obs,f_opt)
 
                 if ismono and diff_model > 4: #Monochromatic Source and not diff EOB SNR
-                    print('here')
                     if inst_name == 'NANOGrav' or inst_name == 'SKA': #Use PTA calculation
                         SNRMatrix[j,i] = calcPTAMonoSNR(source_var_dict,inst_var_dict,f_init)
                     else:
@@ -191,7 +193,6 @@ def getSNRMatrix(source_var_dict,inst_var_dict,var_x,sampleRate_x,var_y,sampleRa
                 elif diff_model <= 4: # Model for the diff EOB waveform/SNR calculation
                     SNRMatrix[j,i] = calcDiffSNR(source_var_dict,fT,S_n_f_sqrt,diff_f,diff_h_f,f_init)
                 else: #Chirping Source
-                    print('there')
                     if recalculate_strain == True: #If we need to calculate the waveform everytime
                         newVars = []
                         for name in source_var_dict.keys():
@@ -462,8 +463,8 @@ def calcDiffSNR(source_var_dict,fT,S_n_f_sqrt,diff_f,diff_h,f_init):
 def plotSNR(source_var_dict,inst_var_dict,var_x,sample_x,var_y,sample_y,SNRMatrix,display=True,dl_axis=False,isitsavetime=False,figloc=None):
     '''Plots the SNR contours from calcSNR'''
     #Selects contour levels to separate sections into
-    #contLevels = np.array([5,10, 1e2, 1e3, 1e4, 1e5, 1e6])
-    contLevels = np.array([1,10, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7,1e8,1e9])
+    contLevels = np.array([5,10, 1e2, 1e3, 1e4, 1e5, 1e6])
+    #contLevels = np.array([1,10, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7,1e8,1e9])
     #contLevels = np.array([1,10, 1e2, 1e3, 1e4])
     logLevels = np.log10(contLevels)
     axissize = 14
