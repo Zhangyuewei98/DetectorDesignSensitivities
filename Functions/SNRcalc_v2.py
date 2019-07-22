@@ -460,7 +460,7 @@ def calcDiffSNR(source_var_dict,fT,S_n_f_sqrt,diff_f,diff_h,f_init):
     SNR = np.sqrt(SNRsqrd)
     return SNR
 
-def plotSNR(source_var_dict,inst_var_dict,var_x,sample_x,var_y,sample_y,SNRMatrix,display=True,dl_axis=False,isitsavetime=False,figloc=None):
+def plotSNR(source_var_dict,inst_var_dict,var_x,sample_x,var_y,sample_y,SNRMatrix,display=True,dl_axis=False,figloc=None):
     '''Plots the SNR contours from calcSNR'''
     #Selects contour levels to separate sections into
     contLevels = np.array([5,10, 1e2, 1e3, 1e4, 1e5, 1e6])
@@ -496,7 +496,7 @@ def plotSNR(source_var_dict,inst_var_dict,var_x,sample_x,var_y,sample_y,SNRMatri
         ylabel_min = inst_var_dict[inst_name][var_y]['min'].value
         ylabel_max = inst_var_dict[inst_name][var_y]['max'].value
 
-    #Can't take log of astropy united variables
+    #Can't take log of astropy variables
     try:
         tmp_sample_x = np.log10(sample_x)
     except:
@@ -506,31 +506,38 @@ def plotSNR(source_var_dict,inst_var_dict,var_x,sample_x,var_y,sample_y,SNRMatri
     except:
         sample_y = sample_y.value
 
+    #Set whether log or linearly spaced axes
+    if var_x == 'q' or var_x == 'chi1' or var_x == 'chi2':
+        xaxis_type = 'lin'
+    else:
+        xaxis_type = 'log'
+
+    if var_y == 'q' or var_y == 'chi1' or var_y == 'chi2':
+        yaxis_type = 'lin'
+    else:
+        yaxis_type = 'log'
+
     #########################
     #Make the Contour Plots
     fig, ax = plt.subplots(figsize=figsize)
 
     #Set axis scales based on what data sampling we used 
-    if (var_y == 'q' or var_y == 'chi1' or var_y == 'chi2') and (var_x != 'q' and var_x != 'chi1' and var_x != 'chi2'):
+    if yaxis_type == 'lin' and xaxis_type == 'log':
         CS1 = ax.contourf(np.log10(sample_x),sample_y,logSNR,logLevels,cmap = colormap)
         ax.set_xlim(np.log10(xlabel_min),np.log10(xlabel_max))
         ax.set_ylim(ylabel_min,ylabel_max)
         x_labels = np.logspace(np.log10(xlabel_min),np.log10(xlabel_max),np.log10(xlabel_max)-np.log10(xlabel_min)+1)
-        y_labels = np.range(ylabel_min,ylabel_max,1)
+        y_labels = np.linspace(ylabel_min,ylabel_max,ylabel_max-ylabel_min+1)
         ax.set_yticks(y_labels)
-        ax.set_yticklabels(y_labels,fontsize = axissize)
         ax.set_xticks(np.log10(x_labels))
-        ax.set_xticklabels(np.log10(x_labels),fontsize = axissize)
-    elif (var_y != 'q' or var_y != 'chi1'  or var_y != 'chi2' ) and (var_x == 'q' and var_x == 'chi1' and var_x == 'chi2'):
+    elif yaxis_type == 'log' and xaxis_type == 'lin':
         CS1 = ax.contourf(sample_x,np.log10(sample_y),logSNR,logLevels,cmap = colormap)
         ax.set_xlim(xlabel_min,xlabel_max)
         ax.set_ylim(np.log10(ylabel_min),np.log10(ylabel_max))
-        x_labels = np.range(xlabel_min,xlabel_max,1)
+        x_labels = np.linspace(xlabel_min,xlabel_max,xlabel_max-xlabel_min+1)
         y_labels = np.logspace(np.log10(ylabel_min),np.log10(ylabel_max),np.log10(ylabel_max)-np.log10(ylabel_min)+1)
         ax.set_xticks(x_labels)
-        ax.set_xticklabels(x_labels,fontsize = axissize)
         ax.set_yticks(np.log10(y_labels))
-        ax.set_yticklabels(np.log10(y_labels),fontsize = axissize)
     else:
         CS1 = ax.contourf(np.log10(sample_x),np.log10(sample_y),logSNR,logLevels,cmap = colormap)
         ax.set_xlim(np.log10(xlabel_min),np.log10(xlabel_max))
@@ -539,13 +546,41 @@ def plotSNR(source_var_dict,inst_var_dict,var_x,sample_x,var_y,sample_y,SNRMatri
         y_labels = np.logspace(np.log10(ylabel_min),np.log10(ylabel_max),np.log10(ylabel_max)-np.log10(ylabel_min)+1)
         ax.set_yticks(np.log10(y_labels))
         ax.set_xticks(np.log10(x_labels))
-        ax.set_yticklabels([x if int(x) < 1 else int(x) for x in y_labels],\
-            fontsize = axissize)
-        ax.set_xticklabels([r'$10^{%i}$' %x if int(x) > 1 else r'$%i$' %(10**x) for x in np.log10(x_labels)],\
-            fontsize = axissize)
 
-    ax.set_xlabel(r'$M_{\rm tot}$ $[M_{\odot}]$',fontsize = labelsize)
-    ax.set_ylabel(r'${\rm Redshift}$',fontsize = labelsize)
+    #Set axes labels and whether log or linearly spaced
+    if var_x == 'M':
+        ax.set_xlabel(r'$M_{\rm tot}$ $[M_{\odot}]$',fontsize = labelsize)
+        ax.set_xticklabels([r'$10^{%i}$' %x if int(x) > 1 else r'$%i$' %(10**x) for x in np.log10(x_labels)],fontsize = axissize)
+    elif var_x == 'q':
+        ax.set_xlabel(r'$q$',fontsize = labelsize)
+        ax.set_xticklabels(x_labels,fontsize = axissize)
+    elif var_x == 'z':
+        ax.set_xlabel(r'${\rm Redshift}$',fontsize = labelsize)
+        ax.set_xticklabels([x if int(x) < 1 else int(x) for x in x_labels],fontsize = axissize)
+    elif var_x == 'chi1' or var_x == 'chi2':
+        ax.set_xlabel(r'${\rm Spin}$',fontsize = labelsize)
+        ax.set_xticklabels(x_labels,fontsize = axissize)
+    elif var_x == 'L':
+        ax.set_xlabel(r'${\rm Armlength}$ $[m]$',fontsize = labelsize)
+        ax.set_xticklabels([r'$10^{%i}$' %x if int(x) > 1 else r'$%i$' %(10**x) for x in np.log10(x_labels)],fontsize = axissize)
+
+    if var_y == 'M':
+        ax.set_ylabel(r'$M_{\rm tot}$ $[M_{\odot}]$',fontsize = labelsize)
+        ax.set_yticklabels([r'$10^{%i}$' %y if int(y) > 1 else r'$%i$' %(10**y) for y in np.log10(y_labels)],fontsize = axissize)
+    elif var_y == 'q':
+        ax.set_ylabel(r'$q$',fontsize = labelsize)
+        ax.set_yticklabels(y_labels,fontsize = axissize)
+    elif var_y == 'z':
+        ax.set_ylabel(r'${\rm Redshift}$',fontsize = labelsize)
+        ax.set_yticklabels([y if int(y) < 1 else int(y) for y in y_labels],\
+            fontsize = axissize)
+    elif var_y == 'chi1' or var_x == 'chi2':
+        ax.set_ylabel(r'${\rm Spin}$',fontsize = labelsize)
+        ax.set_yticklabels(y_labels,fontsize = axissize)
+    elif var_y == 'L':
+        ax.set_ylabel(r'${\rm Armlength}$ $[m]$',fontsize = labelsize)
+        ax.set_yticklabels([r'$10^{%i}$' %y if int(y) > 1 else r'$%i$' %(10**y) for y in np.log10(y_labels)],fontsize = axissize)
+
     ax.yaxis.set_label_coords(-.10,.5)
 
     #If true, display luminosity distance on right side of plot
@@ -574,7 +609,7 @@ def plotSNR(source_var_dict,inst_var_dict,var_x,sample_x,var_y,sample_y,SNRMatri
 
     #########################
     #Save Figure to File
-    if isitsavetime:
+    if figloc != None:
         fig.savefig(figloc,bbox_inches='tight')
 
 def saveSNR(sample_x,sample_y,SNRMatrix,save_location,SNR_filename,sample_filename):
