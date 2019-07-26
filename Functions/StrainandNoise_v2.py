@@ -24,8 +24,9 @@ class PTA:
         self.Background = False
         self.ndetectors = 1
         self.fT = []
-        self.h_f = []
+        self.h_n_f = []
         self.S_n_f_sqrt = []
+        self.__nfreqs = int(1e3)
 
     def Set_T_obs(self,T_obs,T_obs_min=None,T_obs_max=None):
         self.inst_var_dict['T_obs'] = {'val':T_obs,'min':T_obs_min,'max':T_obs_max}
@@ -38,6 +39,9 @@ class PTA:
 
     def Set_rms(self,rms,rms_min=None,rms_max=None):
         self.inst_var_dict['rms'] = {'val':rms,'min':rms_min,'max':rms_max}
+
+    def Set_nfreqs(self,nfreqs):
+        self.__nfreqs = nfreqs
 
     def Get_Param_Dict(self,var_name):
         return self.inst_var_dict[var_name]
@@ -64,7 +68,7 @@ class PTA:
         P_red = 0.0*u.s*u.s/u.Hz #Assume no pulsar red noise for simplicity
         return P_red
 
-    def Get_PTAASD_v2(self):
+    def Get_ASD(self):
         self.Get_PTAstrain()
         #from Jenet et al. 2006 https://arxiv.org/abs/astro-ph/0609013 (Only for GWB/broadband signals)
         P_w = self.h_f**2/12/np.pi**2*self.fT**(-3)
@@ -90,7 +94,7 @@ class PTA:
         ASD = np.sqrt((12*np.pi**2)*self.fT**2*P_n)
         self.S_n_f_sqrt = ASD
 
-    def Get_PTAstrain(self):
+    def Get_Strain(self):
         # Taken from Moore,Taylor, and Gair 2014 https://arxiv.org/abs/1406.5199
         nfreqs=int(1e3)
         rms = self.Get_Param_Dict('rms')['val']
@@ -118,7 +122,7 @@ class PTA:
         h_c_low = h_c_low_factor*self.fT**(-2)*(1/np.cos(phi))
 
         h_c = h_c_low + h_c_high #Below eqn 16, should it be added in quad?
-        self.h_f = h_c
+        self.h_n_f = h_c
 
     def Defaut_Setup(self):
         self.Set_T_obs(15*u.yr.to('s')*u.s)
@@ -137,6 +141,8 @@ class GroundBased:
         self.Background = False
         self.fT = []
         self.S_n_f_sqrt = []
+        self.h_n_f = []
+        self.__I_data = []
 
     def Set_T_obs(self,T_obs,T_obs_min=None,T_obs_max=None):
         self.inst_var_dict['T_obs'] = {'val':T_obs,'min':T_obs_min,'max':T_obs_max}
@@ -149,9 +155,16 @@ class GroundBased:
 
     def Load_data(self,load_location):
         I_data = np.loadtxt(load_location)
+
+    def Get_ASD(self,load_location):
+        if len(self.__I_data) == 0
+            self.Load_data(load_location)
         self.fT = I_data[:,0]*u.Hz
-        S_n_f_sqrt = I_data[:,1]
-        self.S_n_f_sqrt = S_n_f_sqrt/(u.Hz)**Fraction(1,2)
+        self.S_n_f_sqrt = I_data[:,1]/(u.Hz)**Fraction(1,2)
+
+    def Get_Strain(self,load_location):
+        self.Get_ASD(load_location)
+        self.h_n_f = np.sqrt(self.fT)*self.S_n_f_sqrt
 
 class SpaceBased:
     def __init__(self,name):
@@ -159,8 +172,13 @@ class SpaceBased:
         self.inst_var_dict = {}
         self.Background = False
         self.fT = []
-        self.transferfunction = []
         self.S_n_f_sqrt = []
+        self.h_n_f = []
+        self.transferfunction = []
+        self.__nfreqs = int(1e3)
+        self.__f_low = 1e-5*u.Hz
+        self.__f_high = 1.0*u.Hz
+        self.__transferfunctiondata = []
 
     def Set_T_obs(self,T_obs,T_obs_min=None,T_obs_max=None):
         self.inst_var_dict['T_obs'] = {'val':T_obs,'min':T_obs_min,'max':T_obs_max}
@@ -183,6 +201,18 @@ class SpaceBased:
     def Set_f_IMS_break(self,f_IMS_break,f_IMS_break_min=None,f_IMS_break_max=None):
         self.inst_var_dict['f_IMS_break'] = {'val':f_IMS_break,'min':f_IMS_break_min,'max':f_IMS_break_max}
 
+    def Set_f_low(f_low):
+        self.__f_low = f_low
+
+    def Set_f_high(f_high):
+        self.__f_high = f_high
+
+    def Set_nfreqs(nfreqs):
+        self.__nfreqs = int(nfreqs)
+
+    def Update_Param_val(self,valname,newval):
+        self.inst_var_dict[valname]['val'] = newval
+
     def Get_Param_Dict(self,var_name):
         return self.inst_var_dict[var_name]
 
@@ -197,24 +227,24 @@ class SpaceBased:
         LISA_Transfer_Function_filename = 'transfer.dat' #np.loadtxting transfer function for Lisa noise curve
         LISA_Transfer_Function_filelocation = LISA_Transfer_Function_filedirectory + LISA_Transfer_Function_filename
         LISA_Transfer_Function_data = np.loadtxt(LISA_Transfer_Function_filelocation)
-        return LISA_Transfer_Function_data
+        self.__transferfunctiondata = LISA_Transfer_Function_data
 
-    def Get_TransferFunction(self,f_low=1e-5*u.Hz,f_high=1.0*u.Hz,reload_T=True,LISA_Transfer_Function_data=None):
-        if reload_T == True:
-            LISA_Transfer_Function_data = self.Load_TransferFunction()
+    def Get_TransferFunction(self):
+        if len(self.__transferfunctiondata) == 0:
+            self.Load_TransferFunction()
 
         fc = const.c/(2*self.Get_Param_Dict('L')['val'])  #light round trip freq
-        LISA_Transfer_Function_f = fc*LISA_Transfer_Function_data[:,0]
+        LISA_Transfer_Function_f = fc*self.__transferfunctiondata[:,0]
 
-        idx_f_5 = np.abs(LISA_Transfer_Function_f-f_low).argmin()
-        idx_f_1 = np.abs(LISA_Transfer_Function_f-f_high).argmin()
+        idx_f_5 = np.abs(LISA_Transfer_Function_f-self.__f_low).argmin()
+        idx_f_1 = np.abs(LISA_Transfer_Function_f-self.__f_high).argmin()
 
-        self.transferfunction = LISA_Transfer_Function_data[idx_f_5:idx_f_1,1]
+        self.transferfunction = self.__transferfunctiondata[idx_f_5:idx_f_1,1]
         self.fT = LISA_Transfer_Function_f[idx_f_5:idx_f_1]
 
-    def Get_approxTransferFunction(self,f_low=1e-5*u.Hz,f_high=1.0*u.Hz,nfreqs=1e4):
+    def Get_approxTransferFunction(self):
         #Response function approximation from Calculation described by Neil Cornish (unpublished)
-        self.fT = np.logspace(np.log10(f_low.value),np.log10(f_high.value),nfreqs)*u.Hz
+        self.fT = np.logspace(np.log10(self.__f_low.value),np.log10(self.__f_high.value),self.__nfreqs)*u.Hz
         f_L = const.c/2/np.pi/self.Get_Param_Dict('L')['val'] #Transfer frequency
         R_f = 3/10/(1+0.6*(self.fT/f_L)**2) 
         self.transferfunction = np.sqrt(R_f)
@@ -237,7 +267,7 @@ class SpaceBased:
         PSD = (P_IMS + 2*(1+np.cos(self.fT.value/f_trans.value)**2)*P_acc)/L**2
         return PSD
 
-    def Get_ASD_from_PSD_LISA(self,Norm=20/3):
+    def Get_ASD(self,Norm=20/3):
         #Calculates amplitude spectral density
         PSD = self.Get_PSD()
         ASD = Norm/self.transferfunction**2*PSD #Strain Noise Power Spectral Density
@@ -245,6 +275,11 @@ class SpaceBased:
             self.S_n_f_sqrt = np.sqrt(ASD+self.Add_Background()) #Sqrt of PSD
         else:
             self.S_n_f_sqrt = np.sqrt(ASD)
+
+    def Get_Strain(self):
+        self.Get_ASD()
+        self.h_n_f = np.sqrt(self.fT)*self.S_n_f_sqrt
+
 
     def Add_Background(self):
         #4 year Galactic confusions noise parameters
@@ -269,13 +304,18 @@ class SpaceBased:
         self.Background = True
         self.Get_ASD_from_PSD_LISA()
 
-class ChirpingBHB:
+class BlackHoleBinary:
     def __init__(self):
         self.source_var_dict = {}
         self.f = []
         self.h_f = []
+        self.h_gw = []
         self.f_low = 1e-9
         self.nfreqs = int(1e3)
+        self.T_obs = []
+        self.f_init = []
+        self.f_T_obs = []
+        self.ismono = False
 
     def Set_Mass(self,M,M_min,M_max):
         self.source_var_dict['M'] = {'val':M,'min':M_min,'max':M_max}
@@ -287,6 +327,20 @@ class ChirpingBHB:
         self.source_var_dict['chi2'] = {'val':chi2,'min':chi2_min,'max':chi2_max}
     def Set_Redshift(self,z,z_min,z_max):
         self.source_var_dict['z'] = {'val':z,'min':z_min,'max':z_max}
+    def Set_Inclination(inc,inc_min,inc_max):
+        source_var_dict['inc'] = {'val':inc,'min':inc_min,'max':inc_max}
+
+    def Set_T_obs(instrument):
+        self.T_obs = instrument.Get_Param_Dict('T_obs')['val']
+    def Set_f_init(f_init):
+        self.f_init = f_init
+    def Set_f_low(f_low):
+        self.f_low = f_low
+    def Set_nfreqs(nfreqs):
+        self.nfreqs = nfreqs
+
+    def Update_Param_val(self,valname,newval):
+        self.source_var_dict[valname]['val'] = newval
 
     def Get_Param_Dict(self,var_name):
         return self.source_var_dict[var_name]
@@ -332,35 +386,15 @@ class ChirpingBHB:
         return [phenomD_f,phenomD_h]
 
     def Get_CharStrain(self):
-        h_char = np.sqrt(4*self.f**2*self.h_f**2)
-        return h_char
+        if len(self.f) != 0 and len(self.h_f) != 0:
+            h_char = np.sqrt(4*self.f**2*self.h_f**2)
+            return h_char
+        else:
+            print('You need to get f and h_f first. \n')
+            print('Call Get_Waveform, then StrainConv')
+            return []
 
-    def Default_Setup(self):
-        [phenomD_f,phenomD_h] = self.Get_Waveform()
-        self.StrainConv(phenomD_f,phenomD_h)
-
-
-
-class MonochromaticBHB:
-    def __init__(self,T_obs,f_init):
-        self.source_var_dict = {}
-        self.h_f = []
-        self.T_obs = T_obs
-        self.f_init = f_init
-
-    def Set_Mass(M,M_min,M_max):
-        source_var_dict['M'] = {'val':M,'min':M_min,'max':M_max}
-    def Set_MassRatio(q,q_min,q_max):
-        source_var_dict['q'] = {'val':q,'min':q_min,'max':q_max}
-    def Set_Redshift(z,z_min,z_max):
-        source_var_dict['z'] = {'val':z,'min':z_min,'max':z_max}
-    def Set_Inclination(inc,inc_min,inc_max):
-        source_var_dict['inc'] = {'val':inc,'min':inc_min,'max':inc_max}
-
-    def Get_Param_Dict(self,var_name):
-        return self.inst_var_dict[var_name]
-
-    def Get_MonoStrain(fT,strain_const='Rosado'):
+    def Get_MonoStrain(self,strain_const='Rosado'):
         M = self.Get_Param_Dict('M')['val']
         q = self.Get_Param_Dict('q')['val']
         z = self.Get_Param_Dict('z')['val']
@@ -388,7 +422,50 @@ class MonochromaticBHB:
             #(ie. optimally oriented)
             h_gw = 8/np.sqrt(5)*np.sqrt(self.T_obs)*(const.c/DL)*(np.pi*self.f_init)**(2./3.)*M_chirp**(5./3.)
 
-        self.h_f = h_gw
+        self.h_gw = h_gw
+
+    def checkFreqEvol(self):
+        #####################################
+        #If the initial observed time from merger is less than the time observed
+        #(ie t_init-T_obs < 0 => f_evolve is complex),
+        #the BBH will or has already merged during the observation
+
+        #If the initial observed time from merger is greater than the time observed
+        #(ie t_init-T_obs > 0 => f_evolve is real),
+        #And if the frequency of the binary does evolve over more than one bin,
+        #(ie f_T_obs-f_init < 1/T_obs), it is monochromatic, so we set the frequency
+        #to the optimal frequency of the detector
+
+        #Otherwise it is chirping and evolves over the observation and we
+        #set the starting frequency we observe it at to f(Tobs), which is the 
+        #frequency at an observation time before merger
+        #####################################
+        
+        M = self.source_var_dict['M']['val']
+        q = self.source_var_dict['q']['val']
+        z = self.source_var_dict['z']['val']
+        m_conv = const.G*const.M_sun/const.c**3 #Converts M = [M] to M = [sec]
+        
+        eta = q/(1+q)**2
+        M_redshifted_time = M*(1+z)*m_conv
+        M_chirp = eta**(3/5)*M_redshifted_time
+        
+        #from eqn 41 from Hazboun,Romano, and Smith (2019) https://arxiv.org/abs/1907.04341
+        t_init = 5*(M_chirp)**(-5/3)*(8*np.pi*self.f_init)**(-8/3)
+        #f(t) from eqn 40
+        f_evolve = 1./8./np.pi/M_chirp*(5*M_chirp/(t_init-self.T_obs))**(3./8.)
+        self.f_T_obs = 1./8./np.pi/M_chirp*(5*M_chirp/self.T_obs)**(3./8.)
+        #del(f) from eqn 42
+        delf = 1./8./np.pi/M_chirp*(5*M_chirp/t_init)**(3./8.)*(3*self.T_obs/8/t_init)
+        
+        if delf < (1/self.T_obs):
+            self.ismono = True
+
+    def Default_Setup(self):
+        [phenomD_f,phenomD_h] = self.Get_Waveform()
+        self.StrainConv(phenomD_f,phenomD_h)
+
+    
 
 class TimeDomain:
     def __init__(self,name)
