@@ -27,7 +27,7 @@ top_directory = "/".join(splt_path[0:top_path_idx+1])
 load_directory = top_directory + '/LoadFiles/InstrumentFiles/'
 
 
-def getSNRMatrix(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y,diff_model):
+def getSNRMatrix(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y):
     # # Setting Up SNR Calculation
     # Uses the variable given and the data range to sample the space either logrithmically or linearly based on the 
     # selection of variables. Then it computes the SNR for each value.
@@ -59,9 +59,6 @@ def getSNRMatrix(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y,diff_mo
     #Make sure samples have the correct astropy units
     [sample_x,sample_y] = Handle_Units(sample_x,var_x,sample_y,var_y)
 
-    #Get optimal (highest sensitivity) frequency
-    f_opt = fT[np.argmin(S_n_f_sqrt)]
-
     sampleSize_x = len(sample_x)
     sampleSize_y = len(sample_y)
     SNRMatrix = np.zeros((sampleSize_x,sampleSize_y))
@@ -91,17 +88,18 @@ def getSNRMatrix(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y,diff_mo
                 '''Only recalulate strain if necessary (otherwise leave it at the original values)
                     If it is the first iteration, calculate strain
                     If one of the varibles are Tobs, need to recalculate'''
-                source.Set_T_obs(instrument)
+                source.Set_Instrument(instrument)
                 source.checkFreqEvol()
-                f_init = instrument.f_init
-                f_T_obs = instrument.f_T_obs
-                ismono = instrument.ismono
+                #Get optimal (highest sensitivity) frequency
+                f_init = source.f_init
+                f_T_obs = source.f_T_obs
+                ismono = source.ismono
                 #if ismono f_init=f_opt, else f_init=f_T_obs
-
-                if ismono: #Monochromatic Source and not diff EOB SNR
-                        SNRMatrix[j,i] = calcMonoSNR(source,instrument)
                 '''elif : # Model for the diff EOB waveform/SNR calculation
-                        [j,i] = calcDiffSNR(source,instrument)'''
+                    [j,i] = calcDiffSNR(source,instrument)'''
+                if ismono: #Monochromatic Source and not diff EOB SNR
+                    SNRMatrix[j,i] = calcMonoSNR(source,instrument)
+
                 else: #Chirping Source
                     if recalculate_strain == True: #If we need to calculate the waveform everytime
                         #Get PhenomD waveform
@@ -237,7 +235,7 @@ def calcChirpSNR(source,instrument):
     #Interpolate the Strain Noise Spectral Density to only the frequencies the
     #strain runs over
     #Set Noise to 1e30 outside of signal frequencies
-    S_n_f_interp_old = interp.interp1d(np.log10(instrument.fT.value),np.log10(instrument.S_n_f.value),kind='cubic',fill_value=30.0, bounds_error=False) 
+    S_n_f_interp_old = interp.interp1d(np.log10(instrument.fT.value),np.log10(S_n_f.value),kind='cubic',fill_value=30.0, bounds_error=False) 
     S_n_f_interp_new = S_n_f_interp_old(np.log10(f_cut.value))
     S_n_f_interp = 10**S_n_f_interp_new
 

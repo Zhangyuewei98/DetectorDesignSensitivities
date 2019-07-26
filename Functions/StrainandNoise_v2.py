@@ -26,6 +26,7 @@ class PTA:
         self.fT = []
         self.h_n_f = []
         self.S_n_f_sqrt = []
+        self.f_opt = []
         self.__nfreqs = int(1e3)
 
     def Set_T_obs(self,T_obs,T_obs_min=None,T_obs_max=None):
@@ -42,6 +43,10 @@ class PTA:
 
     def Set_nfreqs(self,nfreqs):
         self.__nfreqs = nfreqs
+
+    def Set_f_opt(self):
+        #Get optimal (highest sensitivity) frequency
+        self.f_opt = self.fT[np.argmin(self.S_n_f_sqrt)]
 
     def Get_Param_Dict(self,var_name):
         return self.inst_var_dict[var_name]
@@ -69,9 +74,9 @@ class PTA:
         return P_red
 
     def Get_ASD(self):
-        self.Get_PTAstrain()
+        self.Get_Strain()
         #from Jenet et al. 2006 https://arxiv.org/abs/astro-ph/0609013 (Only for GWB/broadband signals)
-        P_w = self.h_f**2/12/np.pi**2*self.fT**(-3)
+        P_w = self.h_n_f**2/12/np.pi**2*self.fT**(-3)
 
         P_red = self.Add_RedNoise()
         
@@ -96,7 +101,6 @@ class PTA:
 
     def Get_Strain(self):
         # Taken from Moore,Taylor, and Gair 2014 https://arxiv.org/abs/1406.5199
-        nfreqs=int(1e3)
         rms = self.Get_Param_Dict('rms')['val']
         T_obs = self.Get_Param_Dict('T_obs')['val']
         N_p = self.Get_Param_Dict('N_p')['val']
@@ -104,7 +108,7 @@ class PTA:
 
         P_w = self.Add_WhiteNoise()
         #frequency sampled from 1/observation time to nyquist frequency (c/2)
-        self.fT = np.logspace(np.log10(1/T_obs.value),np.log10(cadence.value/2),nfreqs)*u.Hz
+        self.fT = np.logspace(np.log10(1/T_obs.value),np.log10(cadence.value/2),self.__nfreqs)*u.Hz
 
         SNR = 1.0 # Value of 3 is Used in paper
         chi_corr = 1/np.sqrt(3) #Sky averaged geometric factor eqn. 11
@@ -129,10 +133,9 @@ class PTA:
         self.Set_N_p(30)
         self.Set_rms(100*u.ns.to('s')*u.s)
         self.Set_cadence(1/(2*u.wk.to('s')*u.s))
-
         self.Background = True
-        self.Get_PTAstrain()
-        self.Get_PTAASD_v2()
+        self.Get_ASD()
+        self.Set_f_opt()
 
 class GroundBased:
     def __init__(self,name):
@@ -142,29 +145,36 @@ class GroundBased:
         self.fT = []
         self.S_n_f_sqrt = []
         self.h_n_f = []
+        self.f_opt = []
         self.__I_data = []
 
     def Set_T_obs(self,T_obs,T_obs_min=None,T_obs_max=None):
         self.inst_var_dict['T_obs'] = {'val':T_obs,'min':T_obs_min,'max':T_obs_max}
 
+    def Set_f_opt(self):
+        #Get optimal (highest sensitivity) frequency
+        self.f_opt = self.fT[np.argmin(self.S_n_f_sqrt)]
+
     def Get_Param_Dict(self,var_name):
         return self.inst_var_dict[var_name]
 
-    def Default_Setup(self):
-        self.Set_T_obs(4*u.yr.to('s')*u.s)
-
     def Load_data(self,load_location):
-        I_data = np.loadtxt(load_location)
+        self.__I_data = np.loadtxt(load_location)
 
     def Get_ASD(self,load_location):
-        if len(self.__I_data) == 0
+        if len(self.__I_data) == 0:
             self.Load_data(load_location)
-        self.fT = I_data[:,0]*u.Hz
-        self.S_n_f_sqrt = I_data[:,1]/(u.Hz)**Fraction(1,2)
+        self.fT = self.__I_data[:,0]*u.Hz
+        self.S_n_f_sqrt = self.__I_data[:,1]/(u.Hz)**Fraction(1,2)
 
     def Get_Strain(self,load_location):
         self.Get_ASD(load_location)
         self.h_n_f = np.sqrt(self.fT)*self.S_n_f_sqrt
+
+    def Default_Setup(self,load_location):
+        self.Set_T_obs(4*u.yr.to('s')*u.s)
+        self.Get_Strain(load_location)
+        self.Set_f_opt()
 
 class SpaceBased:
     def __init__(self,name):
@@ -175,6 +185,7 @@ class SpaceBased:
         self.S_n_f_sqrt = []
         self.h_n_f = []
         self.transferfunction = []
+        self.f_opt = []
         self.__nfreqs = int(1e3)
         self.__f_low = 1e-5*u.Hz
         self.__f_high = 1.0*u.Hz
@@ -201,14 +212,18 @@ class SpaceBased:
     def Set_f_IMS_break(self,f_IMS_break,f_IMS_break_min=None,f_IMS_break_max=None):
         self.inst_var_dict['f_IMS_break'] = {'val':f_IMS_break,'min':f_IMS_break_min,'max':f_IMS_break_max}
 
-    def Set_f_low(f_low):
+    def Set_f_low(self,f_low):
         self.__f_low = f_low
 
-    def Set_f_high(f_high):
+    def Set_f_high(self,f_high):
         self.__f_high = f_high
 
-    def Set_nfreqs(nfreqs):
+    def Set_nfreqs(self,nfreqs):
         self.__nfreqs = int(nfreqs)
+
+    def Set_f_opt(self):
+        #Get optimal (highest sensitivity) frequency
+        self.f_opt = self.fT[np.argmin(self.S_n_f_sqrt)]
 
     def Update_Param_val(self,valname,newval):
         self.inst_var_dict[valname]['val'] = newval
@@ -277,7 +292,10 @@ class SpaceBased:
             self.S_n_f_sqrt = np.sqrt(ASD)
 
     def Get_Strain(self):
-        self.Get_ASD()
+        if self.name == 'Neil_LISA':
+            self.Get_ASD(Norm=1.0)
+        else:
+            self.Get_ASD()
         self.h_n_f = np.sqrt(self.fT)*self.S_n_f_sqrt
 
 
@@ -302,7 +320,8 @@ class SpaceBased:
         self.Set_f_IMS_break(2.*u.mHz.to('Hz')*u.Hz)
         self.Get_TransferFunction()
         self.Background = True
-        self.Get_ASD_from_PSD_LISA()
+        self.Get_Strain()
+        self.Set_f_opt()
 
 class BlackHoleBinary:
     def __init__(self):
@@ -310,12 +329,14 @@ class BlackHoleBinary:
         self.f = []
         self.h_f = []
         self.h_gw = []
-        self.f_low = 1e-9
+        self.f_low = 1e-5
         self.nfreqs = int(1e3)
         self.T_obs = []
         self.f_init = []
         self.f_T_obs = []
         self.ismono = False
+        self.__fitcoeffs = []
+        self.__instrument = None
 
     def Set_Mass(self,M,M_min,M_max):
         self.source_var_dict['M'] = {'val':M,'min':M_min,'max':M_max}
@@ -327,17 +348,21 @@ class BlackHoleBinary:
         self.source_var_dict['chi2'] = {'val':chi2,'min':chi2_min,'max':chi2_max}
     def Set_Redshift(self,z,z_min,z_max):
         self.source_var_dict['z'] = {'val':z,'min':z_min,'max':z_max}
-    def Set_Inclination(inc,inc_min,inc_max):
-        source_var_dict['inc'] = {'val':inc,'min':inc_min,'max':inc_max}
+    def Set_Inclination(self,inc,inc_min,inc_max):
+        self.source_var_dict['inc'] = {'val':inc,'min':inc_min,'max':inc_max}
 
-    def Set_T_obs(instrument):
-        self.T_obs = instrument.Get_Param_Dict('T_obs')['val']
-    def Set_f_init(f_init):
+    def Set_T_obs(self,T_obs):
+        self.T_obs = T_obs
+    def Set_f_init(self,f_init):
         self.f_init = f_init
-    def Set_f_low(f_low):
+    def Set_f_low(self,f_low):
         self.f_low = f_low
-    def Set_nfreqs(nfreqs):
+    def Set_nfreqs(self,nfreqs):
         self.nfreqs = nfreqs
+    def Set_Instrument(self,instrument):
+        self.__instrument = instrument
+        self.Set_T_obs(instrument.Get_Param_Dict('T_obs')['val'])
+        self.Set_f_init(instrument.f_opt)
 
     def Update_Param_val(self,valname,newval):
         self.source_var_dict[valname]['val'] = newval
@@ -368,12 +393,11 @@ class BlackHoleBinary:
         fit_coeffs_filedirectory = top_directory + '/LoadFiles/PhenomDFiles/'
         fit_coeffs_filename = 'fitcoeffsWEB.dat'
         fit_coeffs_file = fit_coeffs_filedirectory + fit_coeffs_filename
-        fitcoeffs = np.loadtxt(fit_coeffs_file) #load QNM fitting files for speed later
-        return fitcoeffs
+        self.__fitcoeffs = np.loadtxt(fit_coeffs_file) #load QNM fitting files for speed later
 
-    def Get_Waveform(self,reload_fitcoeffs=True,fitcoeffs=None):
-        if reload_fitcoeffs:
-            fitcoeffs = self.Get_fitcoeffs()
+    def Get_Waveform(self):
+        if len(self.__fitcoeffs) == 0:
+            self.Get_fitcoeffs()
 
         M = self.Get_Param_Dict('M')['val']
         q = self.Get_Param_Dict('q')['val']
@@ -382,7 +406,7 @@ class BlackHoleBinary:
         z = self.Get_Param_Dict('z')['val']
         Vars = [M,q,chi1,chi2,z]
 
-        [phenomD_f,phenomD_h] = PhenomD.FunPhenomD(Vars,fitcoeffs,self.nfreqs,f_low=self.f_low)
+        [phenomD_f,phenomD_h] = PhenomD.FunPhenomD(Vars,self.__fitcoeffs,self.nfreqs,f_low=self.f_low)
         return [phenomD_f,phenomD_h]
 
     def Get_CharStrain(self):
@@ -394,10 +418,11 @@ class BlackHoleBinary:
             print('Call Get_Waveform, then StrainConv')
             return []
 
-    def Get_MonoStrain(self,strain_const='Rosado'):
+    def Get_MonoStrain(self,strain_const='Cornish'):
         M = self.Get_Param_Dict('M')['val']
         q = self.Get_Param_Dict('q')['val']
         z = self.Get_Param_Dict('z')['val']
+        inc = self.Get_Param_Dict('inc')['val']
 
         DL = cosmo.luminosity_distance(z)
         DL = DL.to('m')
@@ -412,9 +437,9 @@ class BlackHoleBinary:
         if strain_const == 'Rosado':
             #Strain from Rosado, Sesana, and Gair (2015) https://arxiv.org/abs/1503.04803
             #(ie. sky and inclination averaged)
-            self.inc = 0 #optimally oriented
-            a = 1+np.cos(self.inc)**2
-            b = -2*np.cos(self.inc)
+            #inc = 0.0 #optimally oriented
+            a = 1+np.cos(inc)**2
+            b = -2*np.cos(inc)
             A = 2*(const.c/DL)*(np.pi*self.f_init)**(2./3.)*M_chirp**(5./3.)
             h_gw = A*np.sqrt(.5*(a**2+b**2))
         elif strain_const == 'Cornish':
@@ -449,7 +474,7 @@ class BlackHoleBinary:
         eta = q/(1+q)**2
         M_redshifted_time = M*(1+z)*m_conv
         M_chirp = eta**(3/5)*M_redshifted_time
-        
+
         #from eqn 41 from Hazboun,Romano, and Smith (2019) https://arxiv.org/abs/1907.04341
         t_init = 5*(M_chirp)**(-5/3)*(8*np.pi*self.f_init)**(-8/3)
         #f(t) from eqn 40
@@ -461,14 +486,16 @@ class BlackHoleBinary:
         if delf < (1/self.T_obs):
             self.ismono = True
 
-    def Default_Setup(self):
+    def Default_Setup(self,instrument):
+        self.Set_Instrument(instrument)
+        self.Get_MonoStrain()
         [phenomD_f,phenomD_h] = self.Get_Waveform()
         self.StrainConv(phenomD_f,phenomD_h)
 
     
 
 class TimeDomain:
-    def __init__(self,name)
+    def __init__(self,name):
         self.name = name
         self.f = []
         self.h_f = []
