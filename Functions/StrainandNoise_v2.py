@@ -269,58 +269,33 @@ class SpaceBased:
         self.Background = True
         self.Get_ASD_from_PSD_LISA()
 
-class BlackHoleBinary:
+class ChirpingBHB:
     def __init__(self):
         self.source_var_dict = {}
         self.f = []
         self.h_f = []
+        self.f_low = 1e-9
+        self.nfreqs = int(1e3)
 
-    def Set_Mass(M,M_min,M_max):
-        source_var_dict['M'] = {'val':M,'min':M_min,'max':M_max}
-    def Set_MassRatio(q,q_min,q_max):
-        source_var_dict['q'] = {'val':q,'min':q_min,'max':q_max}
-    def Set_chi1(chi1,chi1_min,chi1_max):
-        source_var_dict['chi1'] = {'val':chi1,'min':chi_min,'max':chi_max}
-    def Set_chi2(chi2,chi2_min,chi2_max):
-        source_var_dict['chi2'] = {'val':chi2,'min':chi_min,'max':chi_max}
-    def Set_Redshift(z,z_min,z_max):
-        source_var_dict['z'] = {'val':z,'min':z_min,'max':z_max}
+    def Set_Mass(self,M,M_min,M_max):
+        self.source_var_dict['M'] = {'val':M,'min':M_min,'max':M_max}
+    def Set_MassRatio(self,q,q_min,q_max):
+        self.source_var_dict['q'] = {'val':q,'min':q_min,'max':q_max}
+    def Set_Chi1(self,chi1,chi1_min,chi1_max):
+        self.source_var_dict['chi1'] = {'val':chi1,'min':chi1_min,'max':chi1_max}
+    def Set_Chi2(self,chi2,chi2_min,chi2_max):
+        self.source_var_dict['chi2'] = {'val':chi2,'min':chi2_min,'max':chi2_max}
+    def Set_Redshift(self,z,z_min,z_max):
+        self.source_var_dict['z'] = {'val':z,'min':z_min,'max':z_max}
 
-    def Get_CharStrain(Vars,f,h):
-        [f,h] = StrainConv(Vars,f,h)
-        h_char = np.sqrt(4*f**2*h**2)
-        return f,h_char
+    def Get_Param_Dict(self,var_name):
+        return self.source_var_dict[var_name]
 
-    def Get_MonoStrain(Vars,T_obs,f_init,fT,strain_const='Rosado'):
+    def StrainConv(self,natural_f,natural_h):
+        M = self.Get_Param_Dict('M')['val']
+        q = self.Get_Param_Dict('q')['val']
+        z = self.Get_Param_Dict('z')['val']
 
-        [M,q,_,_,z] = Vars
-        DL = cosmo.luminosity_distance(z)
-        DL = DL.to('m')
-
-        m_conv = const.G*const.M_sun/const.c**3 #Converts M = [M] to M = [sec]
-
-        eta = q/(1+q)**2
-        M_redshifted_time = M*(1+z)*m_conv
-        M_chirp = eta**(3/5)*M_redshifted_time
-        #Source is emitting at one frequency (monochromatic)
-        #strain of instrument at f_cw
-        indxfgw = np.abs(fT-f_init).argmin()
-        if strain_const == 'Rosado':
-            #Strain from Rosado, Sesana, and Gair (2015) https://arxiv.org/abs/1503.04803
-            #(ie. sky and inclination averaged)
-            inc = 0 #optimally oriented
-            a = 1+np.cos(inc)**2
-            b = -2*np.cos(inc)
-            A = 2*(const.c/DL)*(np.pi*fT[indxfgw])**(2./3.)*M_chirp**(5./3.)
-            h_gw = A*np.sqrt(.5*(a**2+b**2))
-        elif strain_const == 'Cornish':
-            #Strain from Cornish et. al 2018 (eqn 27) https://arxiv.org/pdf/1803.01944.pdf
-            #(ie. optimally oriented)
-            h_gw = 8/np.sqrt(5)*np.sqrt(T_obs)*(const.c/DL)*(np.pi*fT[indxfgw])**(2./3.)*M_chirp**(5./3.)
-        return [indxfgw,h_gw]
-
-    def StrainConv(Vars,f,h):
-        [M,q,_,_,z] = Vars
         DL = cosmo.luminosity_distance(z)
         DL = DL.to('m')
 
@@ -332,34 +307,120 @@ class BlackHoleBinary:
         #Changed from sqrt(5/16/pi)
         strain_conv = np.sqrt(1/4/np.pi)*(const.c/DL)*M_redshifted_time**2
         
-        f = f*freq_conv
-        h = h*strain_conv
+        self.f = natural_f*freq_conv
+        self.h_f = natural_h*strain_conv
 
-        return [f,h]
-
-    def Get_Waveform(Vars,nfreqs=int(1e3),f_low=1e-9):
+    def Get_fitcoeffs(self):
         fit_coeffs_filedirectory = top_directory + '/LoadFiles/PhenomDFiles/'
         fit_coeffs_filename = 'fitcoeffsWEB.dat'
         fit_coeffs_file = fit_coeffs_filedirectory + fit_coeffs_filename
         fitcoeffs = np.loadtxt(fit_coeffs_file) #load QNM fitting files for speed later
+        return fitcoeffs
 
-        [phenomD_f,phenomD_h] = PhenomD.FunPhenomD(Vars,fitcoeffs,nfreqs,f_low=f_low)
+    def Get_Waveform(self,reload_fitcoeffs=True,fitcoeffs=None):
+        if reload_fitcoeffs:
+            fitcoeffs = self.Get_fitcoeffs()
+
+        M = self.Get_Param_Dict('M')['val']
+        q = self.Get_Param_Dict('q')['val']
+        chi1 = self.Get_Param_Dict('chi1')['val']
+        chi2 = self.Get_Param_Dict('chi2')['val']
+        z = self.Get_Param_Dict('z')['val']
+        Vars = [M,q,chi1,chi2,z]
+
+        [phenomD_f,phenomD_h] = PhenomD.FunPhenomD(Vars,fitcoeffs,self.nfreqs,f_low=self.f_low)
         return [phenomD_f,phenomD_h]
 
-    def Get_hf_from_hcross_hplus(t,h_cross,h_plus,interp_res='coarse',windowing='left'):
+    def Get_CharStrain(self):
+        h_char = np.sqrt(4*self.f**2*self.h_f**2)
+        return h_char
+
+    def Default_Setup(self):
+        [phenomD_f,phenomD_h] = self.Get_Waveform()
+        self.StrainConv(phenomD_f,phenomD_h)
+
+
+
+class MonochromaticBHB:
+    def __init__(self,T_obs,f_init):
+        self.source_var_dict = {}
+        self.h_f = []
+        self.T_obs = T_obs
+        self.f_init = f_init
+
+    def Set_Mass(M,M_min,M_max):
+        source_var_dict['M'] = {'val':M,'min':M_min,'max':M_max}
+    def Set_MassRatio(q,q_min,q_max):
+        source_var_dict['q'] = {'val':q,'min':q_min,'max':q_max}
+    def Set_Redshift(z,z_min,z_max):
+        source_var_dict['z'] = {'val':z,'min':z_min,'max':z_max}
+    def Set_Inclination(inc,inc_min,inc_max):
+        source_var_dict['inc'] = {'val':inc,'min':inc_min,'max':inc_max}
+
+    def Get_Param_Dict(self,var_name):
+        return self.inst_var_dict[var_name]
+
+    def Get_MonoStrain(fT,strain_const='Rosado'):
+        M = self.Get_Param_Dict('M')['val']
+        q = self.Get_Param_Dict('q')['val']
+        z = self.Get_Param_Dict('z')['val']
+
+        DL = cosmo.luminosity_distance(z)
+        DL = DL.to('m')
+
+        m_conv = const.G*const.M_sun/const.c**3 #Converts M = [M] to M = [sec]
+
+        eta = q/(1+q)**2
+        M_redshifted_time = M*(1+z)*m_conv
+        M_chirp = eta**(3/5)*M_redshifted_time
+        #Source is emitting at one frequency (monochromatic)
+        #strain of instrument at f_cw
+        if strain_const == 'Rosado':
+            #Strain from Rosado, Sesana, and Gair (2015) https://arxiv.org/abs/1503.04803
+            #(ie. sky and inclination averaged)
+            self.inc = 0 #optimally oriented
+            a = 1+np.cos(self.inc)**2
+            b = -2*np.cos(self.inc)
+            A = 2*(const.c/DL)*(np.pi*self.f_init)**(2./3.)*M_chirp**(5./3.)
+            h_gw = A*np.sqrt(.5*(a**2+b**2))
+        elif strain_const == 'Cornish':
+            #Strain from Cornish et. al 2018 (eqn 27) https://arxiv.org/pdf/1803.01944.pdf
+            #(ie. optimally oriented)
+            h_gw = 8/np.sqrt(5)*np.sqrt(self.T_obs)*(const.c/DL)*(np.pi*self.f_init)**(2./3.)*M_chirp**(5./3.)
+
+        self.h_f = h_gw
+
+class TimeDomain:
+    def __init__(self,name)
+        self.name = name
+        self.f = []
+        self.h_f = []
+        self.t = []
+        self.h_plus_t = []
+        self.h_cross_t = []
+
+    def Load_Strain(self):
+        diff_filename = self.name + '.dat'
+        diff_filelocation = top_directory + '/LoadFiles/DiffStrain/EOBdiff/' + diff_filename
+        diff_data = np.loadtxt(diff_filelocation)
+        self.t = diff_data[:,0]*u.s
+        self.h_plus_t = diff_data[:,1]
+        self.h_cross_t = diff_data[:,2]
+
+    def Get_hf_from_hcross_hplus(self,interp_res='coarse',windowing='left'):
         '''Converts dimensionless, time domain strain to frequency space'''
 
         #Interpolate time to evenly sampled data, can be fine or coarse
-        diff_t = np.diff(t.value)
+        diff_t = np.diff(self.t.value)
         if interp_res == 'fine':
             dt = min(diff_t)
         elif interp_res == 'coarse':
             dt = max(diff_t)
 
-        interp_t = np.arange(t[0].value,t[-1].value,dt)
+        interp_t = np.arange(self.t[0].value,self.t[-1].value,dt)
         #interpolate strain to evenly sampled data for FFT
-        h_cross_t = interp.interp1d(t,h_cross,kind='cubic')
-        h_plus_t = interp.interp1d(t,h_plus,kind='cubic')
+        h_cross_t = interp.interp1d(self.t,self.h_cross_t,kind='cubic')
+        h_plus_t = interp.interp1d(self.t,self.h_plus_t,kind='cubic')
         interp_h_cross_t = h_cross_t(interp_t)
         interp_h_plus_t = h_plus_t(interp_t)
 
@@ -398,10 +459,8 @@ class BlackHoleBinary:
         #cut=int(len(freqs)*0.9) #Cut off percentage of frequencies
         h_cross_f = h_cross_f[cut_low:cut_high]
         h_plus_f = h_plus_f[cut_low:cut_high]
-        freqs = freqs[cut_low:cut_high]
+        self.f = freqs[cut_low:cut_high]
         
         #Combine them for raw spectral power
-        h_f = np.sqrt((np.abs(h_cross_f))**2 + (np.abs(h_plus_f))**2)
-
-        return freqs,h_f
+        self.h_f = np.sqrt((np.abs(h_cross_f))**2 + (np.abs(h_plus_f))**2)
 

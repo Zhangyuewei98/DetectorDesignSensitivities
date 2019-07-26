@@ -65,7 +65,7 @@ def checkFreqEvol(source_var_dict,T_obs,f_init):
     else:
         return f_T_obs, False
 
-def getSNRMatrix(source_var_dict,inst_var_dict,var_x,sampleRate_x,var_y,sampleRate_y,diff_model,Background=False):
+def getSNRMatrix(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y,diff_model):
     # # Setting Up SNR Calculation
     # Uses the variable given and the data range to sample the space either logrithmically or linearly based on the 
     # selection of variables. Then it computes the SNR for each value.
@@ -73,38 +73,13 @@ def getSNRMatrix(source_var_dict,inst_var_dict,var_x,sampleRate_x,var_y,sampleRa
     # 
 
     #Get PhenomD waveform
-    initVars = []
-    for name in source_var_dict.keys():
-        initVars.append(source_var_dict[name]['val'])
-    [phenomD_f,phenomD_h] = SnN.Get_Waveform(initVars)
-
-    for inst_name_tmp,inst_dict_tmp in inst_var_dict.items():
-        inst_name = inst_name_tmp
-        inst_dict = inst_dict_tmp
+    [phenomD_f,phenomD_h] = source.Get_Waveform(initVars)
 
     #Get Samples for source variables (will return None if they arent var_x or var_y)
-    [sample_x,sample_y,recalculate_strain] = Get_Samples(source_var_dict,var_x,sampleRate_x,var_y,sampleRate_y)
+    [sample_x,sample_y,recalculate_strain] = Get_Samples(source.source_var_dict,var_x,sampleRate_x,var_y,sampleRate_y)
     #Get instrument noise and frequency
-    [fT,S_n_f_sqrt] = Model_Selection(inst_var_dict,Background)
-
-    if diff_model <= 4:
-        if diff_model == 0:
-            diff_name = 'diff0002'
-        elif diff_model == 1:
-            diff_name = 'diff0114'
-        elif diff_model == 2:
-            diff_name = 'diff0178'
-        elif diff_model == 3:
-            diff_name = 'diff0261'
-        elif diff_model == 4:
-            diff_name = 'diff0303'
-        diff_filename = diff_name + '.dat'
-        diff_filelocation = top_directory + '/LoadFiles/DiffStrain/EOBdiff/' + diff_filename
-        diff_data = np.loadtxt(diff_filelocation)
-        diff_t = diff_data[:,0]*u.s
-        diff_hp = diff_data[:,1]
-        diff_hc = diff_data[:,2] 
-        [diff_f,diff_h_f] = SnN.Get_hf_from_hcross_hplus(diff_t,diff_hc,diff_hp)
+    fT = instrument.fT
+    S_n_f_sqrt = instrument.S_n_f_sqrt
 
     #Check if either sample is not a source variable, if not use instrument samples
     #Very sloppy way of doing it...
@@ -213,7 +188,7 @@ def Get_Samples(sup_dict,var_x,sampleRate_x,var_y,sampleRate_y):
 
     for var_name,var_dict in sup_dict.items():
         if var_name == var_x:
-            if len(var_dict) == 3: #If the variable has 'val','min',and 'max' dictionary attributes
+            if var_dict['min'] != None: #If the variable has 'val','min',and 'max' dictionary attributes
                 if var_x == 'q' or var_x == 'chi1' or var_x == 'chi2':
                     #Sample in linear space for mass ratio and spins
                     sample_x = np.linspace(sup_dict[var_x]['min'],sup_dict[var_x]['max'],sampleRate_x)
@@ -233,7 +208,7 @@ def Get_Samples(sup_dict,var_x,sampleRate_x,var_y,sampleRate_y):
                         sample_x = np.logspace(np.log10(sup_dict[var_x]['min']),np.log10(sup_dict[var_x]['max']),sampleRate_x)
             print('x var: ',var_name)
         if var_name == var_y:
-            if len(var_dict) == 3: #If the variable has 'val','min',and 'max' dictionary attributes
+            if var_dict['min'] != None: #If the variable has 'val','min',and 'max' dictionary attributes
                 if var_y == 'q' or var_y == 'chi1' or var_y == 'chi2':
                     #Sample in linear space for mass ratio and spins
                     sample_y = np.linspace(sup_dict[var_y]['min'],sup_dict[var_y]['max'],sampleRate_y)
