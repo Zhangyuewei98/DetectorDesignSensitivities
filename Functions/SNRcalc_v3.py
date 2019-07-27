@@ -35,13 +35,13 @@ def getSNRMatrix(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y):
     # 
 
     #Get PhenomD waveform
-    [phenomD_f,phenomD_h] = source.Get_Waveform()
+    [phenomD_f,phenomD_h] = source.Get_PhenomD_Strain()
+    source.Set_Instrument(instrument)
 
     #Get Samples for source variables (will return None if they arent var_x or var_y)
     [sample_x,sample_y,recalculate_strain] = Get_Samples(source,var_x,sampleRate_x,var_y,sampleRate_y)
     #Get instrument noise and frequency
-    fT = instrument.fT
-    S_n_f_sqrt = instrument.S_n_f_sqrt
+    Model_Selection(instrument)
 
     #Check if either sample is not a source variable, if not use instrument samples
     #Very sloppy way of doing it...
@@ -71,41 +71,29 @@ def getSNRMatrix(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y):
                 instrument.Update_Param_val(var_x,sample_x[i])
                 source.Update_Param_val(var_y, sample_y[j])
             elif recalculate_noise == 'y':
-                instrument.Update_Param_val(var_x,sample_x[i])
-                source.Update_Param_val(var_y,sample_y[j])
+                source.Update_Param_val(var_x,sample_x[j])
+                instrument.Update_Param_val(var_y,sample_y[i])
             elif recalculate_noise == 'both':
                 instrument.Update_Param_val(var_x,sample_x[i])
-                source.Update_Param_val(var_y,sample_y[j])
+                instrument.Update_Param_val(var_y,sample_y[j])
             elif recalculate_noise == 'neither':
                 source.Update_Param_val(var_x,sample_x[i])
                 source.Update_Param_val(var_y,sample_y[j])
             
             if recalculate_noise != 'neither':
                 #Recalculate noise curves if something is varied
-                [fT,S_n_f_sqrt] = Model_Selection(instrument)
-
-            if recalculate_noise != 'both' or (recalculate_noise == 'neither' and i==0 and j==0) or var_x == 'Tobs' or var_y == 'Tobs':
-                '''Only recalulate strain if necessary (otherwise leave it at the original values)
-                    If it is the first iteration, calculate strain
-                    If one of the varibles are Tobs, need to recalculate'''
+                Model_Selection(instrument)
                 source.Set_Instrument(instrument)
-                source.checkFreqEvol()
-                #Get optimal (highest sensitivity) frequency
-                f_init = source.f_init
-                f_T_obs = source.f_T_obs
-                ismono = source.ismono
-                #if ismono f_init=f_opt, else f_init=f_T_obs
-                '''elif : # Model for the diff EOB waveform/SNR calculation
-                    [j,i] = calcDiffSNR(source,instrument)'''
-                if ismono: #Monochromatic Source and not diff EOB SNR
-                    SNRMatrix[j,i] = calcMonoSNR(source,instrument)
 
-                else: #Chirping Source
-                    if recalculate_strain == True: #If we need to calculate the waveform everytime
-                        #Get PhenomD waveform
-                        [phenomD_f,phenomD_h] = source.Get_Waveform()
-                        source.StrainConv(phenomD_f,phenomD_h)
-                    SNRMatrix[j,i] = calcChirpSNR(source,instrument)
+            source.checkFreqEvol()
+            if source.ismono: #Monochromatic Source and not diff EOB SNR
+                SNRMatrix[j,i] = calcMonoSNR(source,instrument)
+            else: #Chirping Source
+                if recalculate_strain == True: #If we need to calculate the waveform everytime
+                    #Get PhenomD waveform
+                    [phenomD_f,phenomD_h] = source.Get_PhenomD_Strain()
+                source.StrainConv(phenomD_f,phenomD_h)
+                SNRMatrix[j,i] = calcChirpSNR(source,instrument)
 
     return [sample_x,sample_y,SNRMatrix]
 
@@ -178,7 +166,8 @@ def Model_Selection(instrument):
         load_location = load_directory + 'aLIGO/StrainFiles/' + load_name
         instrument.Get_ASD(load_location)
 
-    return instrument.fT,instrument.S_n_f_sqrt
+    else:
+        instrument.Get_ASD()
 
 def Handle_Units(sample_x,var_x,sample_y,var_y):
     '''Since I am using astropy units, I need to update units on the selected samples'''
@@ -203,7 +192,7 @@ def Handle_Units(sample_x,var_x,sample_y,var_y):
 
     return sample_x,sample_y
 
-def calcPTAMonoSNR(source,instrument):
+def calcMonoSNR(source,instrument):
     #SNR for a monochromatic source in a PTA
     #From Moore,Taylor,and Gair 2015 https://arxiv.org/abs/1406.5199
     instrument.Get_Strain()

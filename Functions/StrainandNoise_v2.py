@@ -74,7 +74,8 @@ class PTA:
         return P_red
 
     def Get_ASD(self):
-        self.Get_Strain()
+        if len(self.h_n_f) == 0: 
+            self.Get_Strain()
         #from Jenet et al. 2006 https://arxiv.org/abs/astro-ph/0609013 (Only for GWB/broadband signals)
         P_w = self.h_n_f**2/12/np.pi**2*self.fT**(-3)
 
@@ -134,6 +135,7 @@ class PTA:
         self.Set_rms(100*u.ns.to('s')*u.s)
         self.Set_cadence(1/(2*u.wk.to('s')*u.s))
         self.Background = True
+        self.Get_Strain()
         self.Get_ASD()
         self.Set_f_opt()
 
@@ -168,11 +170,13 @@ class GroundBased:
         self.S_n_f_sqrt = self.__I_data[:,1]/(u.Hz)**Fraction(1,2)
 
     def Get_Strain(self,load_location):
-        self.Get_ASD(load_location)
+        if len(self.fT) == 0 or len(self.S_n_f_sqrt) == 0:
+            self.Get_ASD(load_location)
         self.h_n_f = np.sqrt(self.fT)*self.S_n_f_sqrt
 
     def Default_Setup(self,load_location):
         self.Set_T_obs(4*u.yr.to('s')*u.s)
+        self.Get_ASD(load_location)
         self.Get_Strain(load_location)
         self.Set_f_opt()
 
@@ -222,6 +226,10 @@ class SpaceBased:
         self.__nfreqs = int(nfreqs)
 
     def Set_f_opt(self):
+        if len(self.fT) == 0:
+            self.Get_TransferFunction()
+        if len(self.S_n_f_sqrt) == 0:
+            self.Get_ASD()
         #Get optimal (highest sensitivity) frequency
         self.f_opt = self.fT[np.argmin(self.S_n_f_sqrt)]
 
@@ -265,6 +273,8 @@ class SpaceBased:
         self.transferfunction = np.sqrt(R_f)
 
     def Get_PSD(self):
+        if len(self.fT) == 0:
+            self.Get_TransferFunction()
         A_acc = self.Get_Param_Dict('A_acc')['val']
 
         f_acc_break_low = self.Get_Param_Dict('f_acc_break_low')['val']
@@ -292,6 +302,8 @@ class SpaceBased:
             self.S_n_f_sqrt = np.sqrt(ASD)
 
     def Get_Strain(self):
+        if len(self.fT) == 0:
+            self.Get_TransferFunction() 
         if self.name == 'Neil_LISA':
             self.Get_ASD(Norm=1.0)
         else:
@@ -320,6 +332,7 @@ class SpaceBased:
         self.Set_f_IMS_break(2.*u.mHz.to('Hz')*u.Hz)
         self.Get_TransferFunction()
         self.Background = True
+        self.Get_ASD()
         self.Get_Strain()
         self.Set_f_opt()
 
@@ -395,7 +408,7 @@ class BlackHoleBinary:
         fit_coeffs_file = fit_coeffs_filedirectory + fit_coeffs_filename
         self.__fitcoeffs = np.loadtxt(fit_coeffs_file) #load QNM fitting files for speed later
 
-    def Get_Waveform(self):
+    def Get_PhenomD_Strain(self):
         if len(self.__fitcoeffs) == 0:
             self.Get_fitcoeffs()
 
@@ -489,7 +502,7 @@ class BlackHoleBinary:
     def Default_Setup(self,instrument):
         self.Set_Instrument(instrument)
         self.Get_MonoStrain()
-        [phenomD_f,phenomD_h] = self.Get_Waveform()
+        [phenomD_f,phenomD_h] = self.Get_PhenomD_Strain()
         self.StrainConv(phenomD_f,phenomD_h)
 
     
