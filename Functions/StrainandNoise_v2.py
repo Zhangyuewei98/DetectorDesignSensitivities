@@ -478,7 +478,6 @@ class BlackHoleBinary:
         #set the starting frequency we observe it at to f(Tobs), which is the 
         #frequency at an observation time before merger
         #####################################
-        
         M = self.source_var_dict['M']['val']
         q = self.source_var_dict['q']['val']
         z = self.source_var_dict['z']['val']
@@ -498,6 +497,8 @@ class BlackHoleBinary:
         
         if delf < (1/self.T_obs):
             self.ismono = True
+        else:
+            self.ismono = False
 
     def Default_Setup(self,instrument):
         self.Set_Instrument(instrument)

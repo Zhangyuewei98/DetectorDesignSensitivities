@@ -168,6 +168,7 @@ def Model_Selection(instrument):
 
     else:
         instrument.Get_ASD()
+    instrument.Set_f_opt()
 
 def Handle_Units(sample_x,var_x,sample_y,var_y):
     '''Since I am using astropy units, I need to update units on the selected samples'''
@@ -196,7 +197,11 @@ def calcMonoSNR(source,instrument):
     #SNR for a monochromatic source in a PTA
     #From Moore,Taylor,and Gair 2015 https://arxiv.org/abs/1406.5199
     instrument.Get_Strain()
-    source.Get_MonoStrain()
+
+    if instrument.name == 'NANOGrav' or instrument.name == 'SKA':
+        source.Get_MonoStrain(strain_const='Rosado')
+    else:
+        source.Get_MonoStrain(strain_const='Cornish')
 
     indxfgw = np.abs(instrument.fT-source.f_init).argmin()
 
@@ -212,13 +217,13 @@ def calcChirpSNR(source,instrument):
     S_n_f = instrument.S_n_f_sqrt**2 #Amplitude Spectral Density
 
     #Only want to integrate from observed frequency (f(T_obs_before_merger)) till merger
-    indxfgw = np.abs(source.f-source.f_init).argmin()
+    indxfgw = np.abs(source.f-source.f_T_obs).argmin()
     if indxfgw >= len(source.f)-1:
         #If the SMBH has already merged set the SNR to ~0
         return 1e-30  
     else:
         f_cut = source.f[indxfgw:]
-        h_cut = source.f[indxfgw:]
+        h_cut = source.h_f[indxfgw:]
 
     #################################
     #Interpolate the Strain Noise Spectral Density to only the frequencies the
