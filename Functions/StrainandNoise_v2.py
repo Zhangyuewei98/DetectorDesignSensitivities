@@ -45,8 +45,10 @@ class PTA:
         self.__nfreqs = nfreqs
 
     def Set_f_opt(self):
+        if len(self.fT) == 0 or len(self.h_n_f) == 0:
+            self.Get_Strain()
         #Get optimal (highest sensitivity) frequency
-        self.f_opt = self.fT[np.argmin(self.S_n_f_sqrt)]
+        self.f_opt = self.fT[np.argmin(self.h_n_f)]
 
     def Get_Param_Dict(self,var_name):
         return self.inst_var_dict[var_name]
@@ -143,7 +145,6 @@ class GroundBased:
     def __init__(self,name):
         self.name = name
         self.inst_var_dict = {}
-        self.Background = False
         self.fT = []
         self.S_n_f_sqrt = []
         self.h_n_f = []
@@ -155,7 +156,7 @@ class GroundBased:
 
     def Set_f_opt(self):
         #Get optimal (highest sensitivity) frequency
-        self.f_opt = self.fT[np.argmin(self.S_n_f_sqrt)]
+        self.f_opt = self.fT[np.argmin(self.h_n_f)]
 
     def Get_Param_Dict(self,var_name):
         return self.inst_var_dict[var_name]
@@ -228,10 +229,10 @@ class SpaceBased:
     def Set_f_opt(self):
         if len(self.fT) == 0:
             self.Get_TransferFunction()
-        if len(self.S_n_f_sqrt) == 0:
-            self.Get_ASD()
+        if len(self.h_n_f) == 0:
+            self.Get_Strain()
         #Get optimal (highest sensitivity) frequency
-        self.f_opt = self.fT[np.argmin(self.S_n_f_sqrt)]
+        self.f_opt = self.fT[np.argmin(self.h_n_f)]
 
     def Update_Param_val(self,valname,newval):
         self.inst_var_dict[valname]['val'] = newval
@@ -331,7 +332,7 @@ class SpaceBased:
         self.Set_A_IMS(10e-12*u.m)
         self.Set_f_IMS_break(2.*u.mHz.to('Hz')*u.Hz)
         self.Get_TransferFunction()
-        self.Background = True
+        self.Background = False
         self.Get_ASD()
         self.Get_Strain()
         self.Set_f_opt()
