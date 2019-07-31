@@ -41,7 +41,8 @@ def getSNRMatrix(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y):
     #Get Samples for source variables (will return None if they arent var_x or var_y)
     [sample_x,sample_y,recalculate_strain] = Get_Samples(source,var_x,sampleRate_x,var_y,sampleRate_y)
     #Get instrument noise and frequency
-    Model_Selection(instrument)
+    instrument.Get_ASD()
+    instrument.Set_f_opt()
 
     #Check if either sample is not a source variable, if not use instrument samples
     #Very sloppy way of doing it...
@@ -82,7 +83,8 @@ def getSNRMatrix(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y):
             
             if recalculate_noise != 'neither':
                 #Recalculate noise curves if something is varied
-                Model_Selection(instrument)
+                instrument.Get_ASD()
+                instrument.Set_f_opt()
                 source.Set_Instrument(instrument)
 
             source.checkFreqEvol()
@@ -149,27 +151,6 @@ def Get_Samples(obj,var_x,sampleRate_x,var_y,sampleRate_y):
 
     return sample_x,sample_y,recalculate_strain
 
-def Model_Selection(instrument):
-    '''Uses the instrument to calculate the frequency
-        and amplitude spectral density corresponding to the detector's name in the
-        dictionary
-    '''
-    inst_name = instrument.name
-
-    if inst_name == 'ET': #Einstein Telescope
-        load_name = 'ET_D_data.txt'
-        load_location = load_directory + 'EinsteinTelescope/StrainFiles/' + load_name
-        instrument.Get_ASD(load_location)
-
-    elif inst_name == 'aLIGO': #aLIGO
-        load_name = 'aLIGODesign.txt'
-        load_location = load_directory + 'aLIGO/StrainFiles/' + load_name
-        instrument.Get_ASD(load_location)
-
-    else:
-        instrument.Get_ASD()
-    instrument.Set_f_opt()
-
 def Handle_Units(sample_x,var_x,sample_y,var_y):
     '''Since I am using astropy units, I need to update units on the selected samples'''
     #Handle x variables
@@ -196,7 +177,6 @@ def Handle_Units(sample_x,var_x,sample_y,var_y):
 def calcMonoSNR(source,instrument):
     #SNR for a monochromatic source in a PTA
     #From Moore,Taylor,and Gair 2015 https://arxiv.org/abs/1406.5199
-    instrument.Get_Strain()
 
     if instrument.name == 'NANOGrav' or instrument.name == 'SKA':
         source.Get_MonoStrain(strain_const='Rosado')
@@ -205,7 +185,7 @@ def calcMonoSNR(source,instrument):
 
     indxfgw = np.abs(instrument.fT-source.f_init).argmin()
 
-    SNR = source.h_gw/instrument.h_n_f[indxfgw]
+    SNR = source.h_gw/instrument.S_n_f_sqrt[indxfgw]
     return SNR
 
 def calcChirpSNR(source,instrument):

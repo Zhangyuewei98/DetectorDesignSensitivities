@@ -223,39 +223,50 @@ class PTA:
         self.Set_f_opt()
 
 class GroundBased:
-    def __init__(self,name,load_location):
+    def __init__(self,name,load_location,T_obs):
         self.name = name
-        self.inst_var_dict = {}
-        self.fT = []
-        self.S_n_f_sqrt = []
-        self.h_n_f = []
-        self.f_opt = []
-        self.__I_data = np.loadtxt(load_location)
+        self.var_dict = {}
+        self.T_obs = T_obs
+        self._I_data = np.loadtxt(load_location)
 
-    def Set_T_obs(self,T_obs,T_obs_min=None,T_obs_max=None):
-        self.inst_var_dict['T_obs'] = {'val':T_obs,'min':T_obs_min,'max':T_obs_max}
+    @property
+    def T_obs(self):
+        return self._T_obs
+    @T_obs.setter
+    def T_obs(self,value,value_min=None,value_max=None):
+        try:
+            if len(value) == 3:
+                Set_Param_val(self,'T_obs',value[0],value[1],value[2])
+                self._T_obs = value[0]
+        except:
+            try:
+                Update_Param_val(self,'T_obs',value)
+            except:
+                Set_Param_val(self,'T_obs',value,None,None)
+            self._T_obs = value
 
-    def Set_f_opt(self):
-        #Get optimal (highest sensitivity) frequency
-        self.f_opt = self.fT[np.argmin(self.h_n_f)]
+    @property
+    def S_n_f_sqrt(self):
+        self._S_n_f_sqrt = self._I_data[:,1]/(u.Hz)**Fraction(1,2)
+        return self._S_n_f_sqrt
+
+    @property
+    def fT(self):
+        self._fT = self._I_data[:,0]*u.Hz
+        return self._fT
+    
+    @property
+    def h_n_f(self):
+        self._h_n_f = np.sqrt(self.fT)*self.S_n_f_sqrt
+        return self._h_n_f
+
+    @property
+    def f_opt(self):
+        self._f_opt = self.fT[np.argmin(self.h_n_f)]
+        return self._f_opt
 
     def Get_Param_Dict(self,var_name):
         return self.inst_var_dict[var_name]
-
-    def Get_ASD(self):
-        self.fT = self.__I_data[:,0]*u.Hz
-        self.S_n_f_sqrt = self.__I_data[:,1]/(u.Hz)**Fraction(1,2)
-
-    def Get_Strain(self):
-        if len(self.fT) == 0 or len(self.S_n_f_sqrt) == 0:
-            self.Get_ASD()
-        self.h_n_f = np.sqrt(self.fT)*self.S_n_f_sqrt
-
-    def Default_Setup(self,T_obs):
-        self.Set_T_obs(T_obs)
-        self.Get_ASD()
-        self.Get_Strain()
-        self.Set_f_opt()
 
 class SpaceBased:
     def __init__(self,name):
@@ -272,8 +283,21 @@ class SpaceBased:
         self.__f_high = 1.0*u.Hz
         self.__transferfunctiondata = []
 
-    def Set_T_obs(self,T_obs,T_obs_min=None,T_obs_max=None):
-        self.inst_var_dict['T_obs'] = {'val':T_obs,'min':T_obs_min,'max':T_obs_max}
+    @property
+    def T_obs(self):
+        return self._T_obs
+    @T_obs.setter
+    def T_obs(self,value,value_min=None,value_max=None):
+        try:
+            if len(value) == 3:
+                Set_Param_val(self,'T_obs',value[0],value[1],value[2])
+                self._T_obs = value[0]
+        except:
+            try:
+                Update_Param_val(self,'T_obs',value)
+            except:
+                Set_Param_val(self,'T_obs',value,None,None)
+            self._T_obs = value
 
     def Set_L(self,L,L_min=None,L_max=None):
         self.inst_var_dict['L'] = {'val':L,'min':L_min,'max':L_max}
@@ -415,71 +439,193 @@ class SpaceBased:
         self.Set_f_opt()
 
 class BlackHoleBinary:
-    def __init__(self):
-        self.source_var_dict = {}
-        self.f = []
-        self.h_f = []
-        self.h_gw = []
-        self.f_low = 1e-5
-        self.T_obs = []
-        self.f_init = []
-        self.f_T_obs = []
-        self.ismono = False
-        self.__nfreqs = int(1e3)
-        self.__fitcoeffs = []
-        self.__instrument = None
-
-    def Set_Mass(self,M,M_min=None,M_max=None):
-        self.source_var_dict['M'] = {'val':M,'min':M_min,'max':M_max}
-    def Set_MassRatio(self,q,q_min=None,q_max=None):
-        self.source_var_dict['q'] = {'val':q,'min':q_min,'max':q_max}
-    def Set_Chi1(self,chi1,chi1_min=None,chi1_max=None):
-        self.source_var_dict['chi1'] = {'val':chi1,'min':chi1_min,'max':chi1_max}
-    def Set_Chi2(self,chi2,chi2_min=None,chi2_max=None):
-        self.source_var_dict['chi2'] = {'val':chi2,'min':chi2_min,'max':chi2_max}
-    def Set_Redshift(self,z,z_min=None,z_max=None):
-        self.source_var_dict['z'] = {'val':z,'min':z_min,'max':z_max}
-    def Set_Inclination(self,inc,inc_min=None,inc_max=None):
-        self.source_var_dict['inc'] = {'val':inc,'min':inc_min,'max':inc_max}
-
-    def Set_T_obs(self,T_obs):
-        self.T_obs = T_obs
-    def Set_f_init(self,f_init):
-        self.f_init = f_init
-    def Set_f_low(self,f_low):
+    def __init__(self,M,q,chi1,chi2,z,inc,instrument=None,f_low=1e-5,nfreqs=int(1e3)):
+        self.var_dict = {}
+        self.M = M
+        self.q = q
+        self.z = z
+        self.chi1 = chi1
+        self.chi2 = chi2
+        self.inc = inc
         self.f_low = f_low
-    def Set_nfreqs(self,nfreqs):
-        self.__nfreqs = nfreqs
-    def Set_Instrument(self,instrument):
-        self.__instrument = instrument
-        self.Set_T_obs(instrument.Get_Param_Dict('T_obs')['val'].to('s'))
-        self.Set_f_init(instrument.f_opt)
+        self.nfreqs = nfreqs
 
-    def Update_Param_val(self,valname,newval):
-        self.source_var_dict[valname]['val'] = newval
+        if instrument != None:
+            self.instrument = instrument
+            self.checkFreqEvol()
 
-    def Get_Param_Dict(self,var_name):
-        return self.source_var_dict[var_name]
+        self.Get_fitcoeffs()
+        [phenomD_f,phenomD_h] = self.Get_PhenomD_Strain()
+        self.StrainConv(phenomD_f,phenomD_h)
 
-    def Get_Current_Source_Vals(self):
-        M = self.Get_Param_Dict('M')['val']
-        q = self.Get_Param_Dict('q')['val']
-        chi1 = self.Get_Param_Dict('chi1')['val']
-        chi2 = self.Get_Param_Dict('chi2')['val']
-        z = self.Get_Param_Dict('z')['val']
-        inc = self.Get_Param_Dict('inc')['val']
-        return [M,q,chi1,chi2,z,inc]
+    @property
+    def M(self):
+        return self._M
+    @M.setter
+    def M(self,value):
+        try:
+            if len(value) == 3:
+                Set_Param_val(self,'M',value[0],value[1],value[2])
+                self._M = value[0]
+        except:
+            try:
+                Update_Param_val(self,'M',value)
+            except:
+                Set_Param_val(self,'M',value,None,None)
+            self._M = value
 
-    def StrainConv(self,natural_f,natural_h):
-        M = self.Get_Param_Dict('M')['val']
-        q = self.Get_Param_Dict('q')['val']
-        z = self.Get_Param_Dict('z')['val']
+    @property
+    def q(self):
+        return self._q
+    @q.setter
+    def q(self,value):
+        try:
+            if len(value) == 3:
+                Set_Param_val(self,'q',value[0],value[1],value[2])
+                self._q = value[0]
+        except:
+            try:
+                Update_Param_val(self,'q',value)
+            except:
+                Set_Param_val(self,'q',value,None,None)
+            self._q = value
 
-        DL = cosmo.luminosity_distance(z)
+    @property
+    def chi1(self):
+        return self._chi1
+    @chi1.setter
+    def chi1(self,value):
+        try:
+            if len(value) == 3:
+                Set_Param_val(self,'chi1',value[0],value[1],value[2])
+                self._chi1 = value[0]
+        except:
+            try:
+                Update_Param_val(self,'chi1',value)
+            except:
+                Set_Param_val(self,'chi1',value,None,None)
+            self._chi1 = value
+
+    @property
+    def chi2(self):
+        return self._chi2
+    @chi2.setter
+    def chi2(self,value):
+        try:
+            if len(value) == 3:
+                Set_Param_val(self,'chi2',value[0],value[1],value[2])
+                self._chi2 = value[0]
+        except:
+            try:
+                Update_Param_val(self,'chi2',value)
+            except:
+                Set_Param_val(self,'chi2',value,None,None)
+            self._chi2 = value
+
+    @property
+    def z(self):
+        return self._z
+    @z.setter
+    def z(self,value):
+        try:
+            if len(value) == 3:
+                Set_Param_val(self,'z',value[0],value[1],value[2])
+                self._z = value[0]
+        except:
+            try:
+                Update_Param_val(self,'z',value)
+            except:
+                Set_Param_val(self,'z',value,None,None)
+            self._z = value
+
+    @property
+    def inc(self):
+        return self._inc
+    @inc.setter
+    def inc(self,value):
+        try:
+            if len(value) == 3:
+                Set_Param_val(self,'inc',value[0],value[1],value[2])
+                self._inc = value[0]
+        except:
+            try:
+                Update_Param_val(self,'inc',value)
+            except:
+                Set_Param_val(self,'inc',value,None,None)
+            self._inc = value
+
+    @property
+    def instrument(self):
+        return self._instrument
+    @instrument.setter
+    def instrument(self,value):
+        self.__instrument = value
+        self.T_obs = value.T_obs.to('s')
+        self.f_init = value.f_opt
+
+    @property
+    def f_init(self):
+        return self._f_init
+    @f_init.setter
+    def f_init(self,value):
+        self._f_init = value
+
+    @property
+    def T_obs(self):
+        return self._T_obs
+    @T_obs.setter
+    def T_obs(self,value):
+        self._T_obs = value
+
+    @property
+    def h_gw(self):
+        return self._h_gw
+    @h_gw.setter
+    def h_gw(self,strain_const='Cornish'):
+        DL = cosmo.luminosity_distance(self.z)
         DL = DL.to('m')
 
         m_conv = const.G*const.M_sun/const.c**3 #Converts M = [M] to M = [sec]
-        M_redshifted_time = M*(1+z)*m_conv
+
+        eta = self.q/(1+self.q)**2
+        M_redshifted_time = self.M*(1+self.z)*m_conv
+        M_chirp = eta**(3/5)*M_redshifted_time
+        #Source is emitting at one frequency (monochromatic)
+        #strain of instrument at f_cw
+        if strain_const == 'Rosado':
+            #Strain from Rosado, Sesana, and Gair (2015) https://arxiv.org/abs/1503.04803
+            #(ie. sky and inclination averaged)
+            #inc = 0.0 #optimally oriented
+            a = 1+np.cos(self.inc)**2
+            b = -2*np.cos(self.inc)
+            A = 2*(const.c/DL)*(np.pi*self.f_init)**(2./3.)*M_chirp**(5./3.)
+            self._h_gw = A*np.sqrt(.5*(a**2+b**2))*np.sqrt(self.T_obs)
+        elif strain_const == 'Cornish':
+            #Strain from Cornish et. al 2018 (eqn 27) https://arxiv.org/pdf/1803.01944.pdf
+            #(ie. optimally oriented)
+            self._h_gw = 8/np.sqrt(5)*np.sqrt(self.T_obs)*(const.c/DL)*(np.pi*self.f_init)**(2./3.)*M_chirp**(5./3.)
+
+    def Get_fitcoeffs(self):
+        fit_coeffs_filedirectory = top_directory + '/LoadFiles/PhenomDFiles/'
+        fit_coeffs_filename = 'fitcoeffsWEB.dat'
+        fit_coeffs_file = fit_coeffs_filedirectory + fit_coeffs_filename
+        self._fitcoeffs = np.loadtxt(fit_coeffs_file) #load QNM fitting files for speed later
+
+    def Get_PhenomD_Strain(self):
+        if not hasattr(self,'_fitcoeffs'):
+            self.Get_fitcoeffs()
+
+        Vars = [self.M,self.q,self.chi1,self.chi2,self.z]
+
+        [phenomD_f,phenomD_h] = PhenomD.FunPhenomD(Vars,self._fitcoeffs,self.nfreqs,f_low=self.f_low)
+        return [phenomD_f,phenomD_h]
+
+    def StrainConv(self,natural_f,natural_h):
+        DL = cosmo.luminosity_distance(self.z)
+        DL = DL.to('m')
+
+        m_conv = const.G*const.M_sun/const.c**3 #Converts M = [M] to M = [sec]
+        M_redshifted_time = self.M*(1+self.z)*m_conv
         
         freq_conv = 1/M_redshifted_time
         #Normalized factor?
@@ -489,65 +635,13 @@ class BlackHoleBinary:
         self.f = natural_f*freq_conv
         self.h_f = natural_h*strain_conv
 
-    def Get_fitcoeffs(self):
-        fit_coeffs_filedirectory = top_directory + '/LoadFiles/PhenomDFiles/'
-        fit_coeffs_filename = 'fitcoeffsWEB.dat'
-        fit_coeffs_file = fit_coeffs_filedirectory + fit_coeffs_filename
-        self.__fitcoeffs = np.loadtxt(fit_coeffs_file) #load QNM fitting files for speed later
-
-    def Get_PhenomD_Strain(self):
-        if len(self.__fitcoeffs) == 0:
-            self.Get_fitcoeffs()
-
-        M = self.Get_Param_Dict('M')['val']
-        q = self.Get_Param_Dict('q')['val']
-        chi1 = self.Get_Param_Dict('chi1')['val']
-        chi2 = self.Get_Param_Dict('chi2')['val']
-        z = self.Get_Param_Dict('z')['val']
-        Vars = [M,q,chi1,chi2,z]
-
-        [phenomD_f,phenomD_h] = PhenomD.FunPhenomD(Vars,self.__fitcoeffs,self.__nfreqs,f_low=self.f_low)
-        return [phenomD_f,phenomD_h]
-
     def Get_CharStrain(self):
-        if len(self.f) != 0 and len(self.h_f) != 0:
-            h_char = np.sqrt(4*self.f**2*self.h_f**2)
-            return h_char
-        else:
-            print('You need to get f and h_f first. \n')
-            print('Call Get_Waveform, then StrainConv')
-            return []
+        if not hasattr(self,'f') or not hasattr(self,'h_f'):
+            [natural_f,natural_h] = self.Get_PhenomD_Strain()
+            self.StrainConv(natural_f,natural_h)
 
-    def Get_MonoStrain(self,strain_const='Cornish'):
-        M = self.Get_Param_Dict('M')['val']
-        q = self.Get_Param_Dict('q')['val']
-        z = self.Get_Param_Dict('z')['val']
-        inc = self.Get_Param_Dict('inc')['val']
-
-        DL = cosmo.luminosity_distance(z)
-        DL = DL.to('m')
-
-        m_conv = const.G*const.M_sun/const.c**3 #Converts M = [M] to M = [sec]
-
-        eta = q/(1+q)**2
-        M_redshifted_time = M*(1+z)*m_conv
-        M_chirp = eta**(3/5)*M_redshifted_time
-        #Source is emitting at one frequency (monochromatic)
-        #strain of instrument at f_cw
-        if strain_const == 'Rosado':
-            #Strain from Rosado, Sesana, and Gair (2015) https://arxiv.org/abs/1503.04803
-            #(ie. sky and inclination averaged)
-            #inc = 0.0 #optimally oriented
-            a = 1+np.cos(inc)**2
-            b = -2*np.cos(inc)
-            A = 2*(const.c/DL)*(np.pi*self.f_init)**(2./3.)*M_chirp**(5./3.)
-            h_gw = A*np.sqrt(.5*(a**2+b**2))*np.sqrt(self.T_obs)
-        elif strain_const == 'Cornish':
-            #Strain from Cornish et. al 2018 (eqn 27) https://arxiv.org/pdf/1803.01944.pdf
-            #(ie. optimally oriented)
-            h_gw = 8/np.sqrt(5)*np.sqrt(self.T_obs)*(const.c/DL)*(np.pi*self.f_init)**(2./3.)*M_chirp**(5./3.)
-
-        self.h_gw = h_gw
+        h_char = np.sqrt(4*self.f**2*self.h_f**2)
+        return h_char
 
     def checkFreqEvol(self):
         #####################################
@@ -565,13 +659,10 @@ class BlackHoleBinary:
         #set the starting frequency we observe it at to f(Tobs), which is the 
         #frequency at an observation time before merger
         #####################################
-        M = self.source_var_dict['M']['val']
-        q = self.source_var_dict['q']['val']
-        z = self.source_var_dict['z']['val']
         m_conv = const.G*const.M_sun/const.c**3 #Converts M = [M] to M = [sec]
         
-        eta = q/(1+q)**2
-        M_redshifted_time = M*(1+z)*m_conv
+        eta = self.q/(1+self.q)**2
+        M_redshifted_time = self.M*(1+self.z)*m_conv
         M_chirp = eta**(3/5)*M_redshifted_time
 
         #from eqn 41 from Hazboun,Romano, and Smith (2019) https://arxiv.org/abs/1907.04341
@@ -586,18 +677,6 @@ class BlackHoleBinary:
             self.ismono = True
         else:
             self.ismono = False
-
-    def Default_Setup(self,M,q,chi1,chi2,z,inc,instrument):
-        self.Set_Mass(M)
-        self.Set_MassRatio(q)
-        self.Set_Chi1(chi1)
-        self.Set_Chi2(chi2)
-        self.Set_Redshift(z)
-        self.Set_Inclination(inc)
-        self.Set_Instrument(instrument)
-        self.Get_MonoStrain()
-        [phenomD_f,phenomD_h] = self.Get_PhenomD_Strain()
-        self.StrainConv(phenomD_f,phenomD_h)
 
     
 
@@ -721,3 +800,12 @@ class TimeDomain:
         self.Set_MassRatio(q)
         self.Set_Redshift(z)
         self.StrainConv()
+
+def Get_Param_Dict(obj,var_name):
+    return obj.var_dict[var_name]
+
+def Update_Param_val(obj,var_name,newval):
+    obj.var_dict[var_name]['val'] = newval
+
+def Set_Param_val(obj,var_name,val,val_min,val_max):
+    obj.var_dict[var_name] = {'val':val,'min':val_min,'max':val_max}
