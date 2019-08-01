@@ -21,9 +21,28 @@ top_path_idx = splt_path.index('DetectorDesignSensitivities')
 top_directory = "/".join(splt_path[0:top_path_idx+1])
 
 class PTA:
+    '''
+    Class to make a PTA instrument using either the methods of 
+    Moore, Taylor, and Gair 2015 or Hazboun, Romano, Smith 2019
+    '''
     def __init__(self,name,*args,**kwargs):
-        '''arg order: T_obs,N_p,sigma,cadence'''
-        self.var_dict = {}
+        '''
+        name - name of the instrument
+        args in order: 
+        T_obs - the observation time of the PTA in [years]
+        N_p - the number of pulsars in the PTA 
+        sigma - the rms error on the pulsar TOAs in [sec]
+        cadence - How often the pulsars are observed in [num/year]
+
+        kwargs can be:
+        load_location: If you want to load a PTA curve from a file, 
+                        it's the file path
+        Background: Add in a stochastic gravitational wave background,
+                    only affects the Moore, Taylor, and Gair 2015 model
+        f_low: Assigned lowest frequency of PTA (default assigns 1/(5*T_obs))
+        f_high: Assigned highest frequency of PTA (default is Nyquist freq cadence/2)
+        nfreqs: Number of frequencies in logspace the sensitivity is calculated
+        '''
         self.name = name
         for keys,value in kwargs.items():
             if keys == 'load_location':
@@ -57,64 +76,39 @@ class PTA:
         return self._T_obs
     @T_obs.setter
     def T_obs(self,value):
-        try:
-            if len(value) == 3:
-                Set_Param_val(self,'T_obs',value[0],value[1],value[2])
-                self._T_obs = value[0]
-        except:
-            try:
-                Update_Param_val(self,'T_obs',value)
-            except:
-                Set_Param_val(self,'T_obs',value,None,None)
-            self._T_obs = value
+        self.var_dict = ['T_obs',value]
+        self._T_obs = self._return_value
 
     @property
     def N_p(self):
         return self._N_p
     @N_p.setter
     def N_p(self,value):
-        try:
-            if len(value) == 3:
-                Set_Param_val(self,'N_p',value[0],value[1],value[2])
-                self._N_p = value[0]
-        except:
-            try:
-                Update_Param_val(self,'N_p',value)
-            except:
-                Set_Param_val(self,'N_p',value,None,None)
-            self._N_p = value
+        self.var_dict = ['N_p',value]
+        self._N_p = self._return_value
 
     @property
     def cadence(self):
         return self._cadence
     @cadence.setter
     def cadence(self,value):
-        try:
-            if len(value) == 3:
-                Set_Param_val(self,'cadence',value[0],value[1],value[2])
-                self._cadence = value[0]
-        except:
-            try:
-                Update_Param_val(self,'cadence',value)
-            except:
-                Set_Param_val(self,'cadence',value,None,None)
-            self._cadence = value
+        self.var_dict = ['cadence',value]
+        self._cadence = self._return_value
 
     @property
     def sigma(self):
         return self._sigma
     @sigma.setter
     def sigma(self,value):
-        try:
-            if len(value) == 3:
-                Set_Param_val(self,'sigma',value[0],value[1],value[2])
-                self._sigma = value[0]
-        except:
-            try:
-                Update_Param_val(self,'sigma',value)
-            except:
-                Set_Param_val(self,'sigma',value,None,None)
-            self._sigma = value
+        self.var_dict = ['sigma',value]
+        self._sigma = self._return_value
+
+    @property
+    def var_dict(self):
+        return self._var_dict
+    @var_dict.setter
+    def var_dict(self,value):
+        Get_Var_Dict(self,value)
 
     @property
     def fT(self):
@@ -128,9 +122,13 @@ class PTA:
     @fT.setter
     def fT(self,value):
         self._fT = value
+    @fT.deleter
+    def fT(self,value):
+        del self._fT
 
     @property
     def h_n_f(self):
+        #Effective Strain Noise Amplitude
         if not hasattr(self,'_h_n_f'):
             if self.Strain_Calc_Type == 'approx':
                 self._h_n_f = self.Get_Strain_Moore_2014()
@@ -143,24 +141,32 @@ class PTA:
     @h_n_f.setter
     def h_n_f(self,value):
         self._h_n_f = value
+    @h_n_f.deleter
+    def h_n_f(self,value):
+        del self._h_n_f
     
     @property
-    def S_n_f_sqrt(self):
-        if not hasattr(self,'_S_n_f_sqrt'):
+    def S_n_f(self):
+        #Effective noise power amplitude
+        if not hasattr(self,'_S_n_f'):
             if self.Strain_Calc_Type == 'approx':
-                self._S_n_f_sqrt = self.Get_ASD_Moore_2014()
+                self._S_n_f = self.Get_ASD_Moore_2014()
             elif self.Strain_Calc_Type == 'sim':
-                self._S_n_f_sqrt = self.Get_ASD_Hazboun_2019()
+                self._S_n_ft = self.Get_ASD_Hazboun_2019()
             else:
                 self.Set_Strain_Calc_Type()
-                self.S_n_f_sqrt
-        return self._S_n_f_sqrt
-    @S_n_f_sqrt.setter
-    def S_n_f_sqrt(self,value):
-        self._S_n_f_sqrt = value
+                self.S_n_f
+        return self._S_n_f
+    @S_n_f.setter
+    def S_n_f(self,value):
+        self._S_n_f = value
+    @S_n_f.deleter
+    def S_n_f(self,value):
+        del self._S_n_f
 
     @property
     def f_opt(self):
+        #The optimal frequency of the instrument ie. the frequecy at the lowest strain
         if not hasattr(self,'_f_opt'):
             self._f_opt = self.fT[np.argmin(self.h_n_f)]
         return self._f_opt
@@ -228,8 +234,7 @@ class PTA:
 
         #strain of the full PTA
         #h_f = np.sqrt((12*np.pi**2)*f**3*P_n)
-        ASD = np.sqrt((12*np.pi**2)*self.fT**2*P_n)
-        return ASD
+        return (12*np.pi**2)*self.fT**2*P_n
 
     def Get_Strain_Moore_2014(self):
         # Taken from Moore,Taylor, and Gair 2014 https://arxiv.org/abs/1406.5199
@@ -277,17 +282,30 @@ class PTA:
     def Get_ASD_Hazboun_2019(self):
         if not hasattr(self,'_sensitivitycurve'):
             self.Init_PTA()
-        return np.sqrt(self._sensitivitycurve.S_eff)/(u.Hz)**Fraction(1,2)
+        return self._sensitivitycurve.S_eff/u.Hz
 
     def Get_Strain_Hazboun_2019(self):
         if not hasattr(self,'_sensitivitycurve'):
             self.Init_PTA()
         return self._sensitivitycurve.h_c
 
+
+
+
+
 class GroundBased:
+    '''
+    Class to make a Ground Based Instrument
+    Can only be read in from a file at this point
+    '''
     def __init__(self,name,load_location,T_obs):
+        '''
+        name - the name of the instrument
+        T_obs - the observation time of the Ground Instrument in [years]
+        load_location - If you want to load a PTA curve from a file, 
+                        it's the file path
+        '''
         self.name = name
-        self.var_dict = {}
         self.T_obs = T_obs
         self._I_data = np.loadtxt(load_location)
 
@@ -295,45 +313,74 @@ class GroundBased:
     def T_obs(self):
         return self._T_obs
     @T_obs.setter
-    def T_obs(self,value,value_min=None,value_max=None):
-        try:
-            if len(value) == 3:
-                Set_Param_val(self,'T_obs',value[0],value[1],value[2])
-                self._T_obs = value[0]
-        except:
-            try:
-                Update_Param_val(self,'T_obs',value)
-            except:
-                Set_Param_val(self,'T_obs',value,None,None)
-            self._T_obs = value
+    def T_obs(self,value):
+        self.var_dict = ['T_obs',value]
+        self._T_obs = self._return_value
 
     @property
-    def S_n_f_sqrt(self):
-        self._S_n_f_sqrt = self._I_data[:,1]/(u.Hz)**Fraction(1,2)
-        return self._S_n_f_sqrt
+    def var_dict(self):
+        return self._var_dict
+    @var_dict.setter
+    def var_dict(self,value):
+        Get_Var_Dict(self,value)
+
+    @property
+    def S_n_f(self):
+        #Effective Noise Power Specral Density
+        S_n_f_sqrt = self._I_data[:,1]
+        self._S_n_f = S_n_f_sqrt**2/(u.Hz)
+        return self._S_n_f
+    @S_n_f.deleter
+    def S_n_f(self,value):
+        del self._S_n_f
 
     @property
     def fT(self):
         self._fT = self._I_data[:,0]*u.Hz
         return self._fT
+    @fT.deleter
+    def fT(self,value):
+        del self._fT
     
     @property
     def h_n_f(self):
-        self._h_n_f = np.sqrt(self.fT)*self.S_n_f_sqrt
+        #Characteristic Strain/effective strain noise amplitude
+        self._h_n_f = np.sqrt(self.fT*self.S_n_f)
         return self._h_n_f
+    @h_n_f.deleter
+    def h_n_f(self,value):
+        del self._h_n_f
 
     @property
     def f_opt(self):
+        #The optimal frequency of the instrument ie. the frequecy at the lowest strain
         self._f_opt = self.fT[np.argmin(self.h_n_f)]
         return self._f_opt
 
-    def Get_Param_Dict(self,var_name):
-        return self.inst_var_dict[var_name]
+
+
 
 class SpaceBased:
     def __init__(self,name,*args,**kwargs):
         '''arg order: T_obs,L,A_acc,f_acc_break_low,f_acc_break_high,A_IMS,f_IMS_break'''
-        self.var_dict = {}
+        '''
+        name - name of the instrument
+        args in order: 
+        T_obs - the observation time of the PTA in [years]
+        L - the armlength the of detector in [meters]
+        A_acc - the Amplitude of the Acceleration Noise in [meters/second^2]
+        f_acc_break_low = the lower break frequency of the acceleration noise in [Hz]
+        f_acc_break_high = the higher break frequency of the acceleration noise in [Hz]
+        A_IMS = the amplitude of the interferometer 
+        kwargs can be:
+        load_location: If you want to load a PTA curve from a file, 
+                        it's the file path
+        Background: Add in a stochastic gravitational wave background,
+                    only affects the Moore, Taylor, and Gair 2015 model
+        f_low: Assigned lowest frequency of PTA (default assigns 1/(5*T_obs))
+        f_high: Assigned highest frequency of PTA (default is Nyquist freq cadence/2)
+        nfreqs: Number of frequencies in logspace the sensitivity is calculated
+        '''
         self.name = name
         for keys,value in kwargs.items():
             if keys == 'load_location':
@@ -372,121 +419,73 @@ class SpaceBased:
         return self._T_obs
     @T_obs.setter
     def T_obs(self,value):
-        try:
-            if len(value) == 3:
-                Set_Param_val(self,'T_obs',value[0],value[1],value[2])
-                self._T_obs = value[0]
-        except:
-            try:
-                Update_Param_val(self,'T_obs',value)
-            except:
-                Set_Param_val(self,'T_obs',value,None,None)
-            self._T_obs = value
+        self.var_dict = ['T_obs',value]
+        self._T_obs = self._return_value
 
     @property
     def L(self):
         return self._L
     @L.setter
     def L(self,value):
-        try:
-            if len(value) == 3:
-                Set_Param_val(self,'L',value[0],value[1],value[2])
-                self._L = value[0]
-        except:
-            try:
-                Update_Param_val(self,'L',value)
-            except:
-                Set_Param_val(self,'L',value,None,None)
-            self._L = value
+        self.var_dict = ['L',value]
+        self._L = self._return_value
 
     @property
     def A_acc(self):
         return self._A_acc
     @A_acc.setter
     def A_acc(self,value):
-        try:
-            if len(value) == 3:
-                Set_Param_val(self,'A_acc',value[0],value[1],value[2])
-                self._A_acc = value[0]
-        except:
-            try:
-                Update_Param_val(self,'A_acc',value)
-            except:
-                Set_Param_val(self,'A_acc',value,None,None)
-            self._A_acc = value
+        self.var_dict = ['A_acc',value]
+        self._A_acc = self._return_value
 
     @property
     def f_acc_break_low(self):
         return self._f_acc_break_low
     @f_acc_break_low.setter
     def f_acc_break_low(self,value):
-        try:
-            if len(value) == 3:
-                Set_Param_val(self,'f_acc_break_low',value[0],value[1],value[2])
-                self._f_acc_break_low = value[0]
-        except:
-            try:
-                Update_Param_val(self,'f_acc_break_low',value)
-            except:
-                Set_Param_val(self,'f_acc_break_low',value,None,None)
-            self._f_acc_break_low = value
+        self.var_dict = ['f_acc_break_low',value]
+        self._f_acc_break_low = self._return_value
 
     @property
     def f_acc_break_high(self):
         return self._f_acc_break_high
     @f_acc_break_high.setter
     def f_acc_break_high(self,value):
-        try:
-            if len(value) == 3:
-                Set_Param_val(self,'f_acc_break_high',value[0],value[1],value[2])
-                self._f_acc_break_high = value[0]
-        except:
-            try:
-                Update_Param_val(self,'f_acc_break_high',value)
-            except:
-                Set_Param_val(self,'f_acc_break_high',value,None,None)
-            self._f_acc_break_high = value
+        self.var_dict = ['f_acc_break_high',value]
+        self._f_acc_break_high = self._return_value
 
     @property
     def A_IMS(self):
         return self._A_IMS
     @A_IMS.setter
     def A_IMS(self,value):
-        try:
-            if len(value) == 3:
-                Set_Param_val(self,'A_IMS',value[0],value[1],value[2])
-                self._A_IMS = value[0]
-        except:
-            try:
-                Update_Param_val(self,'A_IMS',value)
-            except:
-                Set_Param_val(self,'A_IMS',value,None,None)
-            self._A_IMS = value
+        self.var_dict = ['A_IMS',value]
+        self._A_IMS = self._return_value
 
     @property
     def f_IMS_break(self):
         return self._f_IMS_break
     @f_IMS_break.setter
     def f_IMS_break(self,value):
-        try:
-            if len(value) == 3:
-                Set_Param_val(self,'f_IMS_break',value[0],value[1],value[2])
-                self._f_IMS_break = value[0]
-        except:
-            try:
-                Update_Param_val(self,'f_IMS_break',value)
-            except:
-                Set_Param_val(self,'f_IMS_break',value,None,None)
-            self._f_IMS_break = value
+        self.var_dict = ['f_IMS_break',value]
+        self._f_IMS_break = self._return_value
+
+    @property
+    def var_dict(self):
+        return self._var_dict
+    @var_dict.setter
+    def var_dict(self,value):
+        Get_Var_Dict(self,value)
 
     @property
     def f_opt(self):
-        #Get optimal (highest sensitivity) frequency
+        #The optimal frequency of the instrument ie. the frequecy at the lowest strain
         self._f_opt = self.fT[np.argmin(self.h_n_f)]
         return self._f_opt
 
     @property
     def P_n_f(self):
+        #Power Spectral Density
         if not hasattr(self,'_P_n_f'):
             if not hasattr(self,'_Tfunction_Type'):
                 self.Set_Tfunction_Type()
@@ -497,63 +496,60 @@ class SpaceBased:
             f_trans = const.c/2/np.pi/self.L #Transfer frequency
             self._P_n_f = (P_IMS + 2*(1+np.cos(self.fT.value/f_trans.value)**2)*P_acc)/self.L**2
         return self._P_n_f
+    @P_n_f.deleter
+    def P_n_f(self,value):
+        del self._P_n_f
 
     @property
-    def S_n_f_sqrt(self):
-        if hasattr(self,'_S_n_f_sqrt'):
+    def S_n_f(self):
+        #Effective Noise Power Specral Density
+        if not hasattr(self,'_S_n_f'):
             if hasattr(self,'_I_data'):
-                if self._I_Type == 'sASD':
-                    self._S_n_f_sqrt = self._I_data[:,1]/(u.Hz)**Fraction(1,2)
-                elif self._I_Type == 'ASD':
-                    S_n_f = self._I_data[:,1]/u.Hz
-                    self._S_n_f_sqrt = np.sqrt(S_n_f)
+                if self._I_Type == 'ASD':
+                    S_n_f_sqrt = self._I_data[:,1]
+                    self._S_n_f = S_n_f_sqrt**2/(u.Hz)
+                elif self._I_Type == 'ENSD':
+                    self.S_n_f = self._I_data[:,1]/u.Hz
                 elif self._I_Type == 'h':
-                    S_n_f = self.h_n_f**2/self.fT
-                    self._S_n_f_sqrt = np.sqrt(S_n_f)
+                    self.S_n_f = self.h_n_f**2/self.fT
             else:
-                #Calculates amplitude spectral density
-                S_n_f = self.P_n_f/self.transferfunction**2 #Strain Noise Power Spectral Density
+                S_n_f = self.P_n_f/self.transferfunction**2 
                 if self.Background:
-                    self._S_n_f_sqrt = np.sqrt(S_n_f+self.Add_Background()) #Sqrt of PSD
+                    self._S_n_f= S_n_f+self.Add_Background() 
                 else:
-                    self._S_n_f_sqrt = np.sqrt(S_n_f)
-        return self._S_n_f_sqrt
+                    self._S_n_f = S_n_f
+        return self._S_n_f
+    @S_n_f.deleter
+    def S_n_f(self,value):
+        del self._S_n_f
 
     @property
     def h_n_f(self):
+        #Characteristic Strain/effective strain noise amplitude
         if not hasattr(self,'_h_n_f'):
-            if hasattr(self,'_I_data'):
-                if self._I_Type == 'h':
+            if hasattr(self,'_I_data') and self._I_Type == 'h':
                     self._h_n_f = self._I_data[:,1]
-                elif self._I_Type == 'ASD':
-                    S_n_f = self._I_data[:,1]/u.Hz
-                    self._h_n_f = np.sqrt(self.fT*S_n_f)
-                elif self._I_Type == 'sASD':
-                    self._h_n_f = np.sqrt(self.fT)*self.S_n_f_sqrt
             else:
-                self._h_n_f = np.sqrt(self.fT)*self.S_n_f_sqrt
+                self._h_n_f = np.sqrt(self.fT*self.S_n_f)
         return self._h_n_f
-
-    def Update_Param_val(self,valname,newval):
-        self.inst_var_dict[valname]['val'] = newval
-
-    def Get_Param_Dict(self,var_name):
-        return self.inst_var_dict[var_name]
+    @h_n_f.deleter
+    def h_n_f(self,value):
+        del self._h_n_f
 
     def Load_Data(self,load_location):
         print('Is the data:')
-        print(' *Amplitude Spectral Density - "ASD"')
-        print(' *sqrt(Amplitude Spectral Density) - "sASD"')
+        print(' *Effective Noise Spectral Density - "E"')
+        print(' *Amplitude Spectral Density- "A"')
         print(' *Effective Strain - "h"')
         I_type = input('Please enter one of the answers in quotations: ')
-        if I_type == 'ASD':
+        if I_type == 'E' or I_type == 'e':
+            self._I_Type = 'ENSD'
+        elif I_type == 'A':
             self._I_Type = 'ASD'
-        elif I_type == 'sASD':
-            self._I_Type = 'sASD'
         elif I_type == 'h':
             self._I_Type = 'h'
         else:
-            print('Please choose either "ASD","sASD", "h", or convert to one of these.\n')
+            print('Please choose either "E","A", "h", or convert to one of these.\n')
             self.Load_Data(load_location)
         self._I_data = np.loadtxt(load_location)
         self.fT = self._I_data[:,0]*u.Hz
@@ -587,15 +583,15 @@ class SpaceBased:
 
     def Set_Tfunction_Type(self):
         print('\nYou can get the transfer function via 2 methods:')
-        print(' *To use the numerically approximated method in Robson, Cornish, and Liu, 2019, input "n".')
-        print(' *To use the analytic fit in Larson, Hiscock, and Hellings, 2000, input "a".')
+        print(' *To use the numerically approximated method in Robson, Cornish, and Liu, 2019, input "N".')
+        print(' *To use the analytic fit in Larson, Hiscock, and Hellings, 2000, input "A".')
         calc_type = input('Please select the calculation type: ')
         if calc_type == 'n' or calc_type == 'N':
             self._Tfunction_Type = 'numeric'
         elif calc_type == 'a' or calc_type == 'A':
             self._Tfunction_Type = 'analytic'
         else:
-            print('Please choose either "analytic" or "numeric".\n')
+            print('Please choose either analytic: "A" or numeric: "N".\n')
             self.Set_Strain_Calc_Type()
         if hasattr(self,'_Tfunction_Type'):
             if self._Tfunction_Type == 'numeric':
@@ -615,12 +611,14 @@ class SpaceBased:
         f = self.fT.value
         return A*np.exp(-(f**a)+(b*f*np.sin(k*f)))*(f**(-7/3))*(1 + np.tanh(g*(f_k-f))) #White Dwarf Background Noise
 
+
+
+
 class BlackHoleBinary:
     def __init__(self,*args,**kwargs):
         '''args order: M,q,chi1,chi2,z,inc
             kwargs: instrument=None,f_low=1e-5,nfreqs=int(1e3)'''
 
-        self.var_dict = {}
         [M,q,chi1,chi2,z,inc] = args
         self.M = M
         self.q = q
@@ -651,96 +649,48 @@ class BlackHoleBinary:
         return self._M
     @M.setter
     def M(self,value):
-        try:
-            if len(value) == 3:
-                Set_Param_val(self,'M',value[0],value[1],value[2])
-                self._M = value[0]
-        except:
-            try:
-                Update_Param_val(self,'M',value)
-            except:
-                Set_Param_val(self,'M',value,None,None)
-            self._M = value
+        self.var_dict = ['M',value]
+        self._M = self._return_value
 
     @property
     def q(self):
         return self._q
     @q.setter
     def q(self,value):
-        try:
-            if len(value) == 3:
-                Set_Param_val(self,'q',value[0],value[1],value[2])
-                self._q = value[0]
-        except:
-            try:
-                Update_Param_val(self,'q',value)
-            except:
-                Set_Param_val(self,'q',value,None,None)
-            self._q = value
+        self.var_dict = ['q',value]
+        self._q = self._return_value
 
     @property
     def chi1(self):
         return self._chi1
     @chi1.setter
     def chi1(self,value):
-        try:
-            if len(value) == 3:
-                Set_Param_val(self,'chi1',value[0],value[1],value[2])
-                self._chi1 = value[0]
-        except:
-            try:
-                Update_Param_val(self,'chi1',value)
-            except:
-                Set_Param_val(self,'chi1',value,None,None)
-            self._chi1 = value
+        self.var_dict = ['chi1',value]
+        self._chi1 = self._return_value
 
     @property
     def chi2(self):
         return self._chi2
     @chi2.setter
     def chi2(self,value):
-        try:
-            if len(value) == 3:
-                Set_Param_val(self,'chi2',value[0],value[1],value[2])
-                self._chi2 = value[0]
-        except:
-            try:
-                Update_Param_val(self,'chi2',value)
-            except:
-                Set_Param_val(self,'chi2',value,None,None)
-            self._chi2 = value
+        self.var_dict = ['chi2',value]
+        self._chi2 = self._return_value
 
     @property
     def z(self):
         return self._z
     @z.setter
     def z(self,value):
-        try:
-            if len(value) == 3:
-                Set_Param_val(self,'z',value[0],value[1],value[2])
-                self._z = value[0]
-        except:
-            try:
-                Update_Param_val(self,'z',value)
-            except:
-                Set_Param_val(self,'z',value,None,None)
-            self._z = value
+        self.var_dict = ['z',value]
+        self._z = self._return_value
 
     @property
     def inc(self):
         return self._inc
     @inc.setter
     def inc(self,value):
-        try:
-            if len(value) == 3:
-                Set_Param_val(self,'inc',value[0],value[1],value[2])
-                self._inc = value[0]
-        except:
-            try:
-                Update_Param_val(self,'inc',value)
-            except:
-                Set_Param_val(self,'inc',value,None,None)
-            self._inc = value
+        self.var_dict = ['inc',value]
+        self._inc = self._return_value
 
     @property
     def instrument(self):
@@ -791,6 +741,9 @@ class BlackHoleBinary:
                 #(ie. optimally oriented)
                 self._h_gw = 8/np.sqrt(5)*np.sqrt(self.T_obs)*(const.c/DL)*(np.pi*self.f_init)**(2./3.)*M_chirp**(5./3.)
         return self._h_gw
+    @h_gw.deleter
+    def h_gw(self,value):
+        del self._h_gw
 
     @property
     def h_f(self):
@@ -801,6 +754,9 @@ class BlackHoleBinary:
     @h_f.setter
     def h_f(self,value):
         self._h_f = value
+    @h_f.deleter
+    def h_f(self,value):
+        del self._h_f
 
     @property
     def f(self):
@@ -811,8 +767,16 @@ class BlackHoleBinary:
     @f.setter
     def f(self,value):
         self._f = value
+    @f.deleter
+    def f(self,value):
+        del self._f
     
-    
+    @property
+    def var_dict(self):
+        return self._var_dict
+    @var_dict.setter
+    def var_dict(self,value):
+        Get_Var_Dict(self,value)
 
     def Get_fitcoeffs(self):
         fit_coeffs_filedirectory = top_directory + '/LoadFiles/PhenomDFiles/'
@@ -866,11 +830,11 @@ class BlackHoleBinary:
 
     
 
+
 class TimeDomain:
     def __init__(self,name,*args):
         '''args order: M,q,z'''
         self.name = name
-        self.var_dict = {}
 
         if len(args) != 0:
             [M,q,z] = args
@@ -884,48 +848,24 @@ class TimeDomain:
         return self._M
     @M.setter
     def M(self,value):
-        try:
-            if len(value) == 3:
-                Set_Param_val(self,'M',value[0],value[1],value[2])
-                self._M = value[0]
-        except:
-            try:
-                Update_Param_val(self,'M',value)
-            except:
-                Set_Param_val(self,'M',value,None,None)
-            self._M = value
+        self.var_dict = ['M',value]
+        self._M = self._return_value
 
     @property
     def q(self):
         return self._q
     @q.setter
     def q(self,value):
-        try:
-            if len(value) == 3:
-                Set_Param_val(self,'q',value[0],value[1],value[2])
-                self._q = value[0]
-        except:
-            try:
-                Update_Param_val(self,'q',value)
-            except:
-                Set_Param_val(self,'q',value,None,None)
-            self._q = value
+        self.var_dict = ['q',value]
+        self._q = self._return_value
 
     @property
     def z(self):
         return self._z
     @z.setter
     def z(self,value):
-        try:
-            if len(value) == 3:
-                Set_Param_val(self,'z',value[0],value[1],value[2])
-                self._z = value[0]
-        except:
-            try:
-                Update_Param_val(self,'z',value)
-            except:
-                Set_Param_val(self,'z',value,None,None)
-            self._z = value
+        self.var_dict = ['z',value]
+        self._z = self._return_value
 
     @property
     def t(self):
@@ -954,6 +894,9 @@ class TimeDomain:
     @h_f.setter
     def h_f(self,value):
         self._h_f = value
+    @h_f.deleter
+    def h_f(self,value):
+        del self._h_f
 
     @property
     def f(self):
@@ -963,9 +906,10 @@ class TimeDomain:
         return self._f
     @f.setter
     def f(self,value):
-        self._f = value    
-    
-    
+        self._f = value
+    @f.deleter
+    def f(self,value):
+        del self._f  
     
     def Load_Data(self):
         diff_filename = self.name + '.dat'
@@ -1052,14 +996,46 @@ def Get_CharStrain(source):
         h_char = np.sqrt(4*source.f**2*source.h_f**2)
         return h_char
     else:
-        print('You need to get f and h_f first. \n')
-        return []
+        raise ValueError('You need to get f and h_f first. \n')
 
-def Get_Param_Dict(obj,var_name):
-    return obj.var_dict[var_name]
 
-def Update_Param_val(obj,var_name,newval):
-    obj.var_dict[var_name]['val'] = newval
+def Get_Var_Dict(obj,value):
+    if not hasattr(obj,'var_dict'):
+            obj._var_dict = {}
+    if isinstance(value,list):
+        if len(value) == 2 and isinstance(value[0],str):
+            var_name = value[0]
+            vals = value[1]
+            if isinstance(vals,list) and len(vals) == 3:
+                if isinstance(vals[0],(float,int,u.Quantity))\
+                 and isinstance(vals[1],(float,int,u.Quantity))\
+                  and isinstance(vals[2],(float,int,u.Quantity)):
+                    obj._return_value = vals[0]
+                    obj._var_dict[var_name] = {'val':vals[0],'min':vals[1],'max':vals[2]}
+                else:
+                    raise ValueError(DictError_3())
+            elif isinstance(vals,(float,int,u.Quantity)):
+                if isinstance(vals,(float,int,u.Quantity)):
+                    if var_name in obj._var_dict.keys():
+                        obj._var_dict[var_name]['val'] = vals
+                    else:
+                        obj.var_dict[var_name] = {'val':vals,'min':None,'max':None}
+                    obj._return_value = vals
+                else:
+                    raise ValueError(DictError_2())
+        else:
+            raise ValueError(DictError_Full())
+    else:
+        raise ValueError(DictError_Full())
 
-def Set_Param_val(obj,var_name,val,val_min,val_max):
-    obj.var_dict[var_name] = {'val':val,'min':val_min,'max':val_max}
+def DictError_Full():
+    return 'Must assign either: \n\
+    - A name and value in a list (ie. ["name",val]), or \n\
+    - A name, a value, a minimum value, and maximum value in a list (ie. ["name",val,min,max]), \n\
+    where where name is a string, and val,min,and max are either floats, ints, or an astropy Quantity.'
+def DictError_3():
+    return 'Must assign a name, a value, a minimum value, and maximum value in a list (ie. ["name",val,min,max]), \n\
+    where name is a string, and val, min, and max are either floats, ints, or astropy Quantities.'
+def DictError_2():
+    return 'Must assign a name and value in a list (ie. ["name",val]) \n\
+    where name is a string, and val is either a float, an int, or an astropy Quantity.'
