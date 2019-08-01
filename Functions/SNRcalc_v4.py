@@ -18,7 +18,7 @@ from astropy.cosmology import WMAP9 as cosmo
 
 from fractions import Fraction
 
-import StrainandNoise as SnN
+import StrainandNoise_v3 as SnN
 
 current_path = os.getcwd()
 splt_path = current_path.split("/")
@@ -49,17 +49,21 @@ def getSNRMatrix(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y):
         for j in range(sampleSize_y):
 
             if recalculate_noise == 'x':
-                instrument.Update_Param_val(var_x,sample_x[i])
-                source.Update_Param_val(var_y, sample_y[j])
+                #Update Attribute (also updates dictionary)
+                setattr(instrument,var_x,sample_x[i])
+                setattr(source,var_y, sample_y[j])
             elif recalculate_noise == 'y':
-                source.Update_Param_val(var_x,sample_x[j])
-                instrument.Update_Param_val(var_y,sample_y[i])
+                #Update Attribute (also updates dictionary)
+                setattr(source,var_x,sample_x[i])
+                setattr(instrument,var_y, sample_y[j])
             elif recalculate_noise == 'both':
-                instrument.Update_Param_val(var_x,sample_x[i])
-                instrument.Update_Param_val(var_y,sample_y[j])
+                #Update Attribute (also updates dictionary)
+                setattr(instrument,var_x,sample_x[i])
+                setattr(instrument,var_y, sample_y[j])
             elif recalculate_noise == 'neither':
-                source.Update_Param_val(var_x,sample_x[i])
-                source.Update_Param_val(var_y,sample_y[j])
+                #Update Attribute (also updates dictionary)
+                setattr(source,var_x,sample_x[i])
+                setattr(source,var_y, sample_y[j])
             
             if recalculate_noise != 'neither':
                 #Recalculate noise curves if something is varied

@@ -18,7 +18,7 @@ from astropy.cosmology import WMAP9 as cosmo
 
 from fractions import Fraction
 
-import StrainandNoise as SnN
+import StrainandNoise_v2 as SnN
 
 current_path = os.getcwd()
 splt_path = current_path.split("/")
