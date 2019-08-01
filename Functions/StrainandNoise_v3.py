@@ -21,79 +21,168 @@ top_path_idx = splt_path.index('DetectorDesignSensitivities')
 top_directory = "/".join(splt_path[0:top_path_idx+1])
 
 class PTA:
-    def __init__(self,name):
+    def __init__(self,name,*args,**kwargs):
+        '''arg order: T_obs,N_p,sigma,cadence'''
+        self.var_dict = {}
         self.name = name
-        self.inst_var_dict = {}
-        self.fT = []
-        self.h_n_f = []
-        self.S_n_f_sqrt = []
-        self.f_opt = []
-        self.Background = False
-        self.Strain_Calc_Type = 'sim' #Or 'approx'
-        self.__nfreqs = int(1e3)
-        self.__sensitivitycurve = []
-        self.__I_data = []
+        for keys,value in kwargs.items():
+            if keys == 'load_location':
+                self.Load_Data(value)
+            elif keys == 'Background':
+                self.Background = value
+            elif keys == 'f_low':
+                self.f_low = value
+            elif keys == 'f_high':
+                self.f_high = value
+            elif keys == 'nfreqs':
+                self.nfreqs = value
 
-    def Set_T_obs(self,T_obs,T_obs_min=None,T_obs_max=None):
-        self.inst_var_dict['T_obs'] = {'val':T_obs,'min':T_obs_min,'max':T_obs_max}
+        if not hasattr(self,'nfreqs'):
+            self.nfreqs = int(1e3)
+        if not hasattr(self,'Background'): 
+            self.Background = False
+        if hasattr(self,'f_low') and hasattr(self,'f_high'):
+            self.fT = np.logspace(self.f_low,self.f_high,self.nfreqs)
 
-    def Set_N_p(self,N_p,N_p_min=None,N_p_max=None):
-        self.inst_var_dict['N_p'] = {'val':N_p,'min':N_p_min,'max':N_p_max}
+        if len(args) != 0:
+            [T_obs,N_p,sigma,cadence] = args
+            self.T_obs = T_obs
+            self.N_p = N_p
+            self.sigma = sigma
+            self.cadence = cadence
+            self.Set_Strain_Calc_Type()
 
-    def Set_Cadence(self,cadence,cadence_min=None,cadence_max=None):
-        self.inst_var_dict['cadence'] = {'val':cadence,'min':cadence_min,'max':cadence_max}
+    @property
+    def T_obs(self):
+        return self._T_obs
+    @T_obs.setter
+    def T_obs(self,value):
+        try:
+            if len(value) == 3:
+                Set_Param_val(self,'T_obs',value[0],value[1],value[2])
+                self._T_obs = value[0]
+        except:
+            try:
+                Update_Param_val(self,'T_obs',value)
+            except:
+                Set_Param_val(self,'T_obs',value,None,None)
+            self._T_obs = value
 
-    def Set_Sigma(self,sigma,sigma_min=None,sigma_max=None):
-        self.inst_var_dict['sigma'] = {'val':sigma,'min':sigma_min,'max':sigma_max}
+    @property
+    def N_p(self):
+        return self._N_p
+    @N_p.setter
+    def N_p(self,value):
+        try:
+            if len(value) == 3:
+                Set_Param_val(self,'N_p',value[0],value[1],value[2])
+                self._N_p = value[0]
+        except:
+            try:
+                Update_Param_val(self,'N_p',value)
+            except:
+                Set_Param_val(self,'N_p',value,None,None)
+            self._N_p = value
+
+    @property
+    def cadence(self):
+        return self._cadence
+    @cadence.setter
+    def cadence(self,value):
+        try:
+            if len(value) == 3:
+                Set_Param_val(self,'cadence',value[0],value[1],value[2])
+                self._cadence = value[0]
+        except:
+            try:
+                Update_Param_val(self,'cadence',value)
+            except:
+                Set_Param_val(self,'cadence',value,None,None)
+            self._cadence = value
+
+    @property
+    def sigma(self):
+        return self._sigma
+    @sigma.setter
+    def sigma(self,value):
+        try:
+            if len(value) == 3:
+                Set_Param_val(self,'sigma',value[0],value[1],value[2])
+                self._sigma = value[0]
+        except:
+            try:
+                Update_Param_val(self,'sigma',value)
+            except:
+                Set_Param_val(self,'sigma',value,None,None)
+            self._sigma = value
+
+    @property
+    def fT(self):
+        if not hasattr(self,'_fT'):
+            #frequency sampled from 1/observation time to nyquist frequency (c/2)
+            #5 is the default value for now (from Hazboun et al. 2019)
+            T_obs_sec = self.T_obs.to('s').value
+            cadence_sec = self.cadence.to('1/s').value
+            self._fT = np.logspace(np.log10(1/(5*T_obs_sec)),np.log10(cadence_sec/2),self.nfreqs)*u.Hz
+        return self._fT
+    @fT.setter
+    def fT(self,value):
+        self._fT = value
+
+    @property
+    def h_n_f(self):
+        if not hasattr(self,'_h_n_f'):
+            if self.Strain_Calc_Type == 'approx':
+                self._h_n_f = self.Get_Strain_Moore_2014()
+            elif self.Strain_Calc_Type == 'sim':
+                self._h_n_f = self.Get_Strain_Hazboun_2019()
+            else:
+                self.Set_Strain_Calc_Type()
+                self.h_n_f
+        return self._h_n_f
+    @h_n_f.setter
+    def h_n_f(self,value):
+        self._h_n_f = value
+    
+    @property
+    def S_n_f_sqrt(self):
+        if not hasattr(self,'_S_n_f_sqrt'):
+            if self.Strain_Calc_Type == 'approx':
+                self._S_n_f_sqrt = self.Get_ASD_Moore_2014()
+            elif self.Strain_Calc_Type == 'sim':
+                self._S_n_f_sqrt = self.Get_ASD_Hazboun_2019()
+            else:
+                self.Set_Strain_Calc_Type()
+                self.S_n_f_sqrt
+        return self._S_n_f_sqrt
+    @S_n_f_sqrt.setter
+    def S_n_f_sqrt(self,value):
+        self._S_n_f_sqrt = value
+
+    @property
+    def f_opt(self):
+        if not hasattr(self,'_f_opt'):
+            self._f_opt = self.fT[np.argmin(self.h_n_f)]
+        return self._f_opt
 
     def Set_Strain_Calc_Type(self):
         print('\nYou can calculate the Strain via 2 methods:')
-        print(' *To use the simulated PTA method in Hazboun, et al. 2019, input "sim".')
-        print(' *To use the approximate/estimation method in Moore, et al. 2014, input "approx".')
+        print(' *To use the simulated PTA method in Hazboun, et al. 2019, input "s".')
+        print(' *To use the approximate/estimation method in Moore, et al. 2014, input "a".')
         calc_type = input('Please select the calculation type: ')
-        if calc_type == 'sim' or calc_type == 'Sim':
+        if calc_type == 's' or calc_type == 'S':
             self.Strain_Calc_Type = 'sim'
-        elif calc_type == 'approx' or calc_type == 'Approx':
+        elif calc_type == 'a' or calc_type == 'A':
             self.Strain_Calc_Type = 'approx'
         else:
             print('Please choose either "sim" or "approx".\n')
             self.Set_Strain_Calc_Type()
 
-    def Set_nfreqs(self,nfreqs):
-        self.__nfreqs = nfreqs
-
-    def Set_f_opt(self):
-        if len(self.fT) == 0 or len(self.h_n_f) == 0:
-            self.Get_Strain()
-        #Get optimal (highest sensitivity) frequency
-        self.f_opt = self.fT[np.argmin(self.h_n_f)]
-
-    def Set_Freqs(self,f_low,f_high):
-        self.fT = np.logspace(f_low,f_high,self.__nfreqs)
-
-    def Get_Param_Dict(self,var_name):
-        return self.inst_var_dict[var_name]
-
     def Load_Data(self,load_location):
-        self.__I_data = np.loadtxt(load_location)
-        self.fT = self.__I_data[:,0]*u.Hz
-        self.h_n_f = self.__I_data[:,1]
+        self._I_data = np.loadtxt(load_location)
+        self.fT = self._I_data[:,0]*u.Hz
+        self.h_n_f = self._I_data[:,1]
 
-    def Get_Strain(self):
-        if self.Strain_Calc_Type == 'approx':
-            self.Get_Strain_Moore_2014()
-        elif self.Strain_Calc_Type == 'sim':
-            self.Get_Strain_Hazboun_2019()
-        else:
-            self.Set_Strain_Calc_Type()
-
-    def Get_ASD(self):
-        if self.Strain_Calc_Type == 'approx':
-            self.Get_ASD_Moore_2014()
-        elif self.Strain_Calc_Type == 'sim':
-            self.Get_ASD_Hazboun_2019()
-        else:
-            self.Set_Strain_Calc_Type()
 
     def Add_Background(self,A_stoch_back=4e-16):
         #Stochastic background amplitude from Sesana et al. 2016 https://arxiv.org/pdf/1603.09348.pdf
@@ -105,10 +194,7 @@ class PTA:
     def Add_WhiteNoise(self):
         #Need to fix for multiple ptas
         #Equation 5 from Lam,M.T. 2018 https://arxiv.org/abs/1808.10071
-        sigma = self.Get_Param_Dict('sigma')['val']
-        cadence = self.Get_Param_Dict('cadence')['val'].to('1/s')
-
-        P_w = sigma**2/cadence #Avg white noise from pulsar arrays [s**2/Hz]
+        P_w = self.sigma**2/self.cadence.to('1/s') #Avg white noise from pulsar arrays [s**2/Hz]
         return P_w
 
     def Add_RedNoise(self):
@@ -118,8 +204,8 @@ class PTA:
         return P_red
 
     def Get_ASD_Moore_2014(self):
-        if len(self.h_n_f) == 0: 
-            self.Get_Strain_Moore_2014()
+        if not hasattr(self,'_h_n_f'): 
+            self.h_n_f = self.Get_Strain_Moore_2014()
         #from Jenet et al. 2006 https://arxiv.org/abs/astro-ph/0609013 (Only for GWB/broadband signals)
         P_w = self.h_n_f**2/12/np.pi**2*self.fT**(-3)
 
@@ -143,18 +229,14 @@ class PTA:
         #strain of the full PTA
         #h_f = np.sqrt((12*np.pi**2)*f**3*P_n)
         ASD = np.sqrt((12*np.pi**2)*self.fT**2*P_n)
-        self.S_n_f_sqrt = ASD
+        return ASD
 
     def Get_Strain_Moore_2014(self):
         # Taken from Moore,Taylor, and Gair 2014 https://arxiv.org/abs/1406.5199
-        sigma = self.Get_Param_Dict('sigma')['val']
-        T_obs = self.Get_Param_Dict('T_obs')['val'].to('s')
-        N_p = self.Get_Param_Dict('N_p')['val']
-        cadence = self.Get_Param_Dict('cadence')['val'].to('1/s')
+        T_obs = self.T_obs.to('s')
+        cadence = self.cadence.to('1/s')
 
         P_w = self.Add_WhiteNoise()
-        #frequency sampled from 1/observation time to nyquist frequency (c/2)
-        self.fT = np.logspace(np.log10(1/T_obs.value),np.log10(cadence.value/2),self.__nfreqs)*u.Hz
 
         SNR = 1.0 # Value of 3 is Used in paper
         chi_corr = 1/np.sqrt(3) #Sky averaged geometric factor eqn. 11
@@ -163,8 +245,8 @@ class PTA:
 
         #h_c_high_factor = (16*SNR**2/(3*chi_corr**4*N_p*(N_p-1)))**(1/4)*sigma_rms*np.sqrt(1/T_obs_tot/cadence)
         #h_c_low_factor = 3*np.sqrt(SNR)/(2**(7/4)*chi_corr*np.pi**3)*(13/N_p/(N_p-1))**(1/4)*sigma_rms*np.sqrt(1/T_obs_tot/cadence)*T_obs_tot**(-3)
-        h_c_high_factor = (16*SNR**2/(3*chi_corr**4*N_p*(N_p-1)))**(1/4)*np.sqrt(P_w/2/T_obs)
-        h_c_low_factor = 3*np.sqrt(SNR)/(2**(7/4)*chi_corr*np.pi**3)*(13/N_p/(N_p-1))**(1/4)*np.sqrt(P_w/2/T_obs)*T_obs**(-3)
+        h_c_high_factor = (16*SNR**2/(3*chi_corr**4*self.N_p*(self.N_p-1)))**(1/4)*np.sqrt(P_w/2/T_obs)
+        h_c_low_factor = 3*np.sqrt(SNR)/(2**(7/4)*chi_corr*np.pi**3)*(13/self.N_p/(self.N_p-1))**(1/4)*np.sqrt(P_w/2/T_obs)*T_obs**(-3)
 
         phi = np.arccos(h_c_low_factor/h_c_high_factor*overlap_freq**(-3))
 
@@ -172,55 +254,35 @@ class PTA:
         h_c_low = h_c_low_factor*self.fT**(-2)*(1/np.cos(phi))
 
         h_c = h_c_low + h_c_high #Below eqn 16, should it be added in quad?
-        self.h_n_f = h_c
+        return h_c
 
     def Init_PTA(self):
         #### Using Jeff's Methods/code https://arxiv.org/abs/1907.04341
-        sigma = self.Get_Param_Dict('sigma')['val'].value
-        T_obs = self.Get_Param_Dict('T_obs')['val'].value
-        N_p = self.Get_Param_Dict('N_p')['val']
-        cadence = self.Get_Param_Dict('cadence')['val'].value
-
-        if len(self.fT) == 0:
-            #5 is the default value?
-            T_obs_sec = T_obs*u.yr.to('s')
-            cadence_sec = cadence/u.yr.to('s')
-            self.fT = np.logspace(np.log10(1/(5*T_obs_sec)),np.log10(cadence_sec/2),self.__nfreqs)*u.Hz
 
         #Random Sky Locations of Pulsars
-        phi = np.random.uniform(0, 2*np.pi,size=N_p)
-        theta = np.random.uniform(0, np.pi,size=N_p)
+        phi = np.random.uniform(0, 2*np.pi,size=self.N_p)
+        theta = np.random.uniform(0, np.pi,size=self.N_p)
 
         #Make a set of psrs with the same parameters
-        psrs = hassim.sim_pta(timespan=T_obs,cad=cadence,sigma=sigma,
-            phi=phi, theta=theta, Npsrs=N_p)
+        psrs = hassim.sim_pta(timespan=self.T_obs.value,cad=self.cadence.value,sigma=self.sigma.value,
+            phi=phi, theta=theta, Npsrs=self.N_p)
         #Get Spectra of pulsars
         spectra= []
         for p in psrs:
              sp = hassens.Spectrum(p,freqs=self.fT.value)
              spectra.append(sp)
 
-        self.__sensitivitycurve = hassens.DeterSensitivityCurve(spectra)
+        self._sensitivitycurve = hassens.DeterSensitivityCurve(spectra)
 
     def Get_ASD_Hazboun_2019(self):
-        if not isinstance(self.__sensitivitycurve,hassens.DeterSensitivityCurve):
+        if not hasattr(self,'_sensitivitycurve'):
             self.Init_PTA()
-        self.S_n_f_sqrt = np.sqrt(self.__sensitivitycurve.S_eff)/(u.Hz)**Fraction(1,2)
+        return np.sqrt(self._sensitivitycurve.S_eff)/(u.Hz)**Fraction(1,2)
 
     def Get_Strain_Hazboun_2019(self):
-        if not isinstance(self.__sensitivitycurve,hassens.DeterSensitivityCurve):
+        if not hasattr(self,'_sensitivitycurve'):
             self.Init_PTA()
-        self.h_n_f = self.__sensitivitycurve.h_c
-
-    def Default_Setup(self,T_obs,N_p,sigma,cadence):
-        self.Set_T_obs(T_obs)
-        self.Set_N_p(N_p)
-        self.Set_Sigma(sigma)
-        self.Set_Cadence(cadence)
-        self.Set_Strain_Calc_Type()
-        self.Get_Strain()
-        self.Get_ASD()
-        self.Set_f_opt()
+        return self._sensitivitycurve.h_c
 
 class GroundBased:
     def __init__(self,name,load_location,T_obs):
@@ -269,25 +331,47 @@ class GroundBased:
         return self.inst_var_dict[var_name]
 
 class SpaceBased:
-    def __init__(self,name):
+    def __init__(self,name,*args,**kwargs):
+        '''arg order: T_obs,L,A_acc,f_acc_break_low,f_acc_break_high,A_IMS,f_IMS_break'''
+        self.var_dict = {}
         self.name = name
-        self.inst_var_dict = {}
-        self.Background = False
-        self.fT = []
-        self.S_n_f_sqrt = []
-        self.h_n_f = []
-        self.transferfunction = []
-        self.f_opt = []
-        self.__nfreqs = int(1e3)
-        self.__f_low = 1e-5*u.Hz
-        self.__f_high = 1.0*u.Hz
-        self.__transferfunctiondata = []
+        for keys,value in kwargs.items():
+            if keys == 'load_location':
+                self.Load_Data(value)
+            elif keys == 'Background':
+                self.Background = value
+            elif keys == 'f_low':
+                self.f_low = value
+            elif keys == 'f_high':
+                self.f_high = value
+            elif keys == 'nfreqs':
+                self.nfreqs = value
+
+        if not hasattr(self,'nfreqs'):
+            self.nfreqs = int(1e3)
+        if not hasattr(self,'f_low'):
+            self.f_low = 1e-5*u.Hz
+        if not hasattr(self,'f_high'):
+            self.f_high = 1.0*u.Hz
+        if not hasattr(self,'Background'): 
+            self.Background = False
+
+        if len(args) != 0:
+            [T_obs,L,A_acc,f_acc_break_low,f_acc_break_high,A_IMS,f_IMS_break] = args
+            self.T_obs = T_obs
+            self.L = L
+            self.A_acc = A_acc
+            self.f_acc_break_low = f_acc_break_low
+            self.f_acc_break_high = f_acc_break_high
+            self.A_IMS = A_IMS
+            self.f_IMS_break = f_IMS_break
+            self.Set_Tfunction_Type()
 
     @property
     def T_obs(self):
         return self._T_obs
     @T_obs.setter
-    def T_obs(self,value,value_min=None,value_max=None):
+    def T_obs(self,value):
         try:
             if len(value) == 3:
                 Set_Param_val(self,'T_obs',value[0],value[1],value[2])
@@ -299,40 +383,156 @@ class SpaceBased:
                 Set_Param_val(self,'T_obs',value,None,None)
             self._T_obs = value
 
-    def Set_L(self,L,L_min=None,L_max=None):
-        self.inst_var_dict['L'] = {'val':L,'min':L_min,'max':L_max}
+    @property
+    def L(self):
+        return self._L
+    @L.setter
+    def L(self,value):
+        try:
+            if len(value) == 3:
+                Set_Param_val(self,'L',value[0],value[1],value[2])
+                self._L = value[0]
+        except:
+            try:
+                Update_Param_val(self,'L',value)
+            except:
+                Set_Param_val(self,'L',value,None,None)
+            self._L = value
 
-    def Set_A_acc(self,A_acc,A_acc_min=None,A_acc_max=None):
-        self.inst_var_dict['A_acc'] = {'val':A_acc,'min':A_acc_min,'max':A_acc_max}
+    @property
+    def A_acc(self):
+        return self._A_acc
+    @A_acc.setter
+    def A_acc(self,value):
+        try:
+            if len(value) == 3:
+                Set_Param_val(self,'A_acc',value[0],value[1],value[2])
+                self._A_acc = value[0]
+        except:
+            try:
+                Update_Param_val(self,'A_acc',value)
+            except:
+                Set_Param_val(self,'A_acc',value,None,None)
+            self._A_acc = value
 
-    def Set_f_acc_break_low(self,f_acc_break_low,f_acc_break_low_min=None,f_acc_break_low_max=None):
-        self.inst_var_dict['f_acc_break_low'] = {'val':f_acc_break_low,'min':f_acc_break_low_min,'max':f_acc_break_low_max}
+    @property
+    def f_acc_break_low(self):
+        return self._f_acc_break_low
+    @f_acc_break_low.setter
+    def f_acc_break_low(self,value):
+        try:
+            if len(value) == 3:
+                Set_Param_val(self,'f_acc_break_low',value[0],value[1],value[2])
+                self._f_acc_break_low = value[0]
+        except:
+            try:
+                Update_Param_val(self,'f_acc_break_low',value)
+            except:
+                Set_Param_val(self,'f_acc_break_low',value,None,None)
+            self._f_acc_break_low = value
 
-    def Set_f_acc_break_high(self,f_acc_break_high,f_acc_break_high_min=None,f_acc_break_high_max=None):
-        self.inst_var_dict['f_acc_break_high'] = {'val':f_acc_break_high,'min':f_acc_break_high_min,'max':f_acc_break_high_max}
+    @property
+    def f_acc_break_high(self):
+        return self._f_acc_break_high
+    @f_acc_break_high.setter
+    def f_acc_break_high(self,value):
+        try:
+            if len(value) == 3:
+                Set_Param_val(self,'f_acc_break_high',value[0],value[1],value[2])
+                self._f_acc_break_high = value[0]
+        except:
+            try:
+                Update_Param_val(self,'f_acc_break_high',value)
+            except:
+                Set_Param_val(self,'f_acc_break_high',value,None,None)
+            self._f_acc_break_high = value
 
-    def Set_A_IMS(self,A_IMS,A_IMS_min=None,A_IMS_max=None):
-        self.inst_var_dict['A_IMS'] = {'val':A_IMS,'min':A_IMS_min,'max':A_IMS_max}
+    @property
+    def A_IMS(self):
+        return self._A_IMS
+    @A_IMS.setter
+    def A_IMS(self,value):
+        try:
+            if len(value) == 3:
+                Set_Param_val(self,'A_IMS',value[0],value[1],value[2])
+                self._A_IMS = value[0]
+        except:
+            try:
+                Update_Param_val(self,'A_IMS',value)
+            except:
+                Set_Param_val(self,'A_IMS',value,None,None)
+            self._A_IMS = value
 
-    def Set_f_IMS_break(self,f_IMS_break,f_IMS_break_min=None,f_IMS_break_max=None):
-        self.inst_var_dict['f_IMS_break'] = {'val':f_IMS_break,'min':f_IMS_break_min,'max':f_IMS_break_max}
+    @property
+    def f_IMS_break(self):
+        return self._f_IMS_break
+    @f_IMS_break.setter
+    def f_IMS_break(self,value):
+        try:
+            if len(value) == 3:
+                Set_Param_val(self,'f_IMS_break',value[0],value[1],value[2])
+                self._f_IMS_break = value[0]
+        except:
+            try:
+                Update_Param_val(self,'f_IMS_break',value)
+            except:
+                Set_Param_val(self,'f_IMS_break',value,None,None)
+            self._f_IMS_break = value
 
-    def Set_f_low(self,f_low):
-        self.__f_low = f_low
-
-    def Set_f_high(self,f_high):
-        self.__f_high = f_high
-
-    def Set_nfreqs(self,nfreqs):
-        self.__nfreqs = int(nfreqs)
-
-    def Set_f_opt(self):
-        if len(self.fT) == 0:
-            self.Get_TransferFunction()
-        if len(self.h_n_f) == 0:
-            self.Get_Strain()
+    @property
+    def f_opt(self):
         #Get optimal (highest sensitivity) frequency
-        self.f_opt = self.fT[np.argmin(self.h_n_f)]
+        self._f_opt = self.fT[np.argmin(self.h_n_f)]
+        return self._f_opt
+
+    @property
+    def P_n_f(self):
+        if not hasattr(self,'_P_n_f'):
+            if not hasattr(self,'_Tfunction_Type'):
+                self.Set_Tfunction_Type()
+
+            P_acc = self.A_acc**2*(1+(self.f_acc_break_low/self.fT)**2)*(1+(self.fT/(self.f_acc_break_high))**4)/(2*np.pi*self.fT)**4 #Acceleration Noise 
+            P_IMS = self.A_IMS**2*(1+(self.f_IMS_break/self.fT)**4) #Displacement noise of the interferometric TM--to-TM 
+
+            f_trans = const.c/2/np.pi/self.L #Transfer frequency
+            self._P_n_f = (P_IMS + 2*(1+np.cos(self.fT.value/f_trans.value)**2)*P_acc)/self.L**2
+        return self._P_n_f
+
+    @property
+    def S_n_f_sqrt(self):
+        if hasattr(self,'_S_n_f_sqrt'):
+            if hasattr(self,'_I_data'):
+                if self._I_Type == 'sASD':
+                    self._S_n_f_sqrt = self._I_data[:,1]/(u.Hz)**Fraction(1,2)
+                elif self._I_Type == 'ASD':
+                    S_n_f = self._I_data[:,1]/u.Hz
+                    self._S_n_f_sqrt = np.sqrt(S_n_f)
+                elif self._I_Type == 'h':
+                    S_n_f = self.h_n_f**2/self.fT
+                    self._S_n_f_sqrt = np.sqrt(S_n_f)
+            else:
+                #Calculates amplitude spectral density
+                S_n_f = self.P_n_f/self.transferfunction**2 #Strain Noise Power Spectral Density
+                if self.Background:
+                    self._S_n_f_sqrt = np.sqrt(S_n_f+self.Add_Background()) #Sqrt of PSD
+                else:
+                    self._S_n_f_sqrt = np.sqrt(S_n_f)
+        return self._S_n_f_sqrt
+
+    @property
+    def h_n_f(self):
+        if not hasattr(self,'_h_n_f'):
+            if hasattr(self,'_I_data'):
+                if self._I_Type == 'h':
+                    self._h_n_f = self._I_data[:,1]
+                elif self._I_Type == 'ASD':
+                    S_n_f = self._I_data[:,1]/u.Hz
+                    self._h_n_f = np.sqrt(self.fT*S_n_f)
+                elif self._I_Type == 'sASD':
+                    self._h_n_f = np.sqrt(self.fT)*self.S_n_f_sqrt
+            else:
+                self._h_n_f = np.sqrt(self.fT)*self.S_n_f_sqrt
+        return self._h_n_f
 
     def Update_Param_val(self,valname,newval):
         self.inst_var_dict[valname]['val'] = newval
@@ -341,76 +541,67 @@ class SpaceBased:
         return self.inst_var_dict[var_name]
 
     def Load_Data(self,load_location):
-        I_data = np.loadtxt(load_location)
-        self.fT = I_data[:,0]*u.Hz
-        S_n_f_sqrt = I_data[:,1]
-        self.S_n_f_sqrt = S_n_f_sqrt/(u.Hz)**Fraction(1,2)
+        print('Is the data:')
+        print(' *Amplitude Spectral Density - "ASD"')
+        print(' *sqrt(Amplitude Spectral Density) - "sASD"')
+        print(' *Effective Strain - "h"')
+        I_type = input('Please enter one of the answers in quotations: ')
+        if I_type == 'ASD':
+            self._I_Type = 'ASD'
+        elif I_type == 'sASD':
+            self._I_Type = 'sASD'
+        elif I_type == 'h':
+            self._I_Type = 'h'
+        else:
+            print('Please choose either "ASD","sASD", "h", or convert to one of these.\n')
+            self.Load_Data(load_location)
+        self._I_data = np.loadtxt(load_location)
+        self.fT = self._I_data[:,0]*u.Hz
 
     def Load_TransferFunction(self):
         LISA_Transfer_Function_filedirectory = top_directory + '/LoadFiles/LISATransferFunction/'
         LISA_Transfer_Function_filename = 'transfer.dat' #np.loadtxting transfer function for Lisa noise curve
         LISA_Transfer_Function_filelocation = LISA_Transfer_Function_filedirectory + LISA_Transfer_Function_filename
         LISA_Transfer_Function_data = np.loadtxt(LISA_Transfer_Function_filelocation)
-        self.__transferfunctiondata = LISA_Transfer_Function_data
+        self._transferfunctiondata = LISA_Transfer_Function_data
 
-    def Get_TransferFunction(self):
-        if len(self.__transferfunctiondata) == 0:
+    def Get_Numeric_Transfer_Function(self):
+        if not hasattr(self,'_transferfunctiondata'):
             self.Load_TransferFunction()
 
-        fc = const.c/(2*self.Get_Param_Dict('L')['val'])  #light round trip freq
-        LISA_Transfer_Function_f = fc*self.__transferfunctiondata[:,0]
+        fc = const.c/(2*self.L)  #light round trip freq
+        LISA_Transfer_Function_f = fc*self._transferfunctiondata[:,0]
 
-        idx_f_5 = np.abs(LISA_Transfer_Function_f-self.__f_low).argmin()
-        idx_f_1 = np.abs(LISA_Transfer_Function_f-self.__f_high).argmin()
+        idx_f_5 = np.abs(LISA_Transfer_Function_f-self.f_low).argmin()
+        idx_f_1 = np.abs(LISA_Transfer_Function_f-self.f_high).argmin()
 
-        self.transferfunction = self.__transferfunctiondata[idx_f_5:idx_f_1,1]
+        self.transferfunction = np.sqrt(3/20)*self._transferfunctiondata[idx_f_5:idx_f_1,1]
         self.fT = LISA_Transfer_Function_f[idx_f_5:idx_f_1]
 
-    def Get_approxTransferFunction(self):
+    def Get_Analytic_Transfer_Function(self):
         #Response function approximation from Calculation described by Neil Cornish (unpublished)
-        self.fT = np.logspace(np.log10(self.__f_low.value),np.log10(self.__f_high.value),self.__nfreqs)*u.Hz
-        f_L = const.c/2/np.pi/self.Get_Param_Dict('L')['val'] #Transfer frequency
+        self.fT = np.logspace(np.log10(self.f_low.value),np.log10(self.f_high.value),self.nfreqs)*u.Hz
+        f_L = const.c/2/np.pi/self.L #Transfer frequency
         R_f = 3/10/(1+0.6*(self.fT/f_L)**2) 
         self.transferfunction = np.sqrt(R_f)
 
-    def Get_PSD(self):
-        if len(self.fT) == 0:
-            self.Get_TransferFunction()
-        A_acc = self.Get_Param_Dict('A_acc')['val']
-
-        f_acc_break_low = self.Get_Param_Dict('f_acc_break_low')['val']
-        f_acc_break_high = self.Get_Param_Dict('f_acc_break_high')['val']
-
-        A_IMS = self.Get_Param_Dict('A_IMS')['val']
-        f_IMS_break = self.Get_Param_Dict('f_IMS_break')['val']
-
-        L = self.Get_Param_Dict('L')['val']
-
-        P_acc = A_acc**2*(1+(f_acc_break_low/self.fT)**2)*(1+(self.fT/(f_acc_break_high))**4)/(2*np.pi*self.fT)**4 #Acceleration Noise 
-        P_IMS = A_IMS**2*(1+(f_IMS_break/self.fT)**4) #Displacement noise of the interferometric TM--to-TM 
-
-        f_trans = const.c/2/np.pi/L #Transfer frequency
-        PSD = (P_IMS + 2*(1+np.cos(self.fT.value/f_trans.value)**2)*P_acc)/L**2
-        return PSD
-
-    def Get_ASD(self,Norm=20/3):
-        #Calculates amplitude spectral density
-        PSD = self.Get_PSD()
-        ASD = Norm/self.transferfunction**2*PSD #Strain Noise Power Spectral Density
-        if self.Background:
-            self.S_n_f_sqrt = np.sqrt(ASD+self.Add_Background()) #Sqrt of PSD
+    def Set_Tfunction_Type(self):
+        print('\nYou can get the transfer function via 2 methods:')
+        print(' *To use the numerically approximated method in Robson, Cornish, and Liu, 2019, input "n".')
+        print(' *To use the analytic fit in Larson, Hiscock, and Hellings, 2000, input "a".')
+        calc_type = input('Please select the calculation type: ')
+        if calc_type == 'n' or calc_type == 'N':
+            self._Tfunction_Type = 'numeric'
+        elif calc_type == 'a' or calc_type == 'A':
+            self._Tfunction_Type = 'analytic'
         else:
-            self.S_n_f_sqrt = np.sqrt(ASD)
-
-    def Get_Strain(self):
-        if len(self.fT) == 0:
-            self.Get_TransferFunction() 
-        if len(self.S_n_f_sqrt) == 0:
-            if self.name == 'Neil_LISA':
-                self.Get_ASD(Norm=1.0)
-            else:
-                self.Get_ASD()
-        self.h_n_f = np.sqrt(self.fT)*self.S_n_f_sqrt
+            print('Please choose either "analytic" or "numeric".\n')
+            self.Set_Strain_Calc_Type()
+        if hasattr(self,'_Tfunction_Type'):
+            if self._Tfunction_Type == 'numeric':
+                self.Get_Numeric_Transfer_Function()
+            if self._Tfunction_Type == 'analytic':
+                self.Get_Analytic_Transfer_Function()
 
 
     def Add_Background(self):
@@ -424,39 +615,36 @@ class SpaceBased:
         f = self.fT.value
         return A*np.exp(-(f**a)+(b*f*np.sin(k*f)))*(f**(-7/3))*(1 + np.tanh(g*(f_k-f))) #White Dwarf Background Noise
 
-    def Default_Setup(self,T_obs,L,A_acc,f_acc_break_low,f_acc_break_high,A_IMS,f_IMS_break,Background):
-        self.Set_T_obs(T_obs)
-        self.Set_L(L)
-        self.Set_A_acc(A_acc)
-        self.Set_f_acc_break_low(f_acc_break_low)
-        self.Set_f_acc_break_high(f_acc_break_high)
-        self.Set_A_IMS(A_IMS)
-        self.Set_f_IMS_break(f_IMS_break)
-        self.Get_TransferFunction()
-        self.Background = Background
-        self.Get_ASD()
-        self.Get_Strain()
-        self.Set_f_opt()
-
 class BlackHoleBinary:
-    def __init__(self,M,q,chi1,chi2,z,inc,instrument=None,f_low=1e-5,nfreqs=int(1e3)):
+    def __init__(self,*args,**kwargs):
+        '''args order: M,q,chi1,chi2,z,inc
+            kwargs: instrument=None,f_low=1e-5,nfreqs=int(1e3)'''
+
         self.var_dict = {}
+        [M,q,chi1,chi2,z,inc] = args
         self.M = M
         self.q = q
         self.z = z
         self.chi1 = chi1
         self.chi2 = chi2
         self.inc = inc
-        self.f_low = f_low
-        self.nfreqs = nfreqs
 
-        if instrument != None:
-            self.instrument = instrument
-            self.checkFreqEvol()
+        for keys,value in kwargs.items():
+            if keys == 'f_low':
+                self.f_low = value
+            elif keys == 'f_high':
+                self.f_high = value
+            elif keys == 'nfreqs':
+                self.nfreqs = value
+            elif keys == 'instrument':
+                self.instrument = value
+                self.checkFreqEvol()
+        if not hasattr(self,'nfreqs'):
+            self.nfreqs = int(1e3)
+        if not hasattr(self,'f_low'):
+            self.f_low = 1e-5*u.Hz
 
         self.Get_fitcoeffs()
-        [phenomD_f,phenomD_h] = self.Get_PhenomD_Strain()
-        self.StrainConv(phenomD_f,phenomD_h)
 
     @property
     def M(self):
@@ -559,7 +747,7 @@ class BlackHoleBinary:
         return self._instrument
     @instrument.setter
     def instrument(self,value):
-        self.__instrument = value
+        self._instrument = value
         self.T_obs = value.T_obs.to('s')
         self.f_init = value.f_opt
 
@@ -578,32 +766,53 @@ class BlackHoleBinary:
         self._T_obs = value
 
     @property
-    def h_gw(self):
-        return self._h_gw
-    @h_gw.setter
     def h_gw(self,strain_const='Cornish'):
-        DL = cosmo.luminosity_distance(self.z)
-        DL = DL.to('m')
+        if not hasattr(self,'_h_gw'):
+            DL = cosmo.luminosity_distance(self.z)
+            DL = DL.to('m')
 
-        m_conv = const.G*const.M_sun/const.c**3 #Converts M = [M] to M = [sec]
+            m_conv = const.G*const.M_sun/const.c**3 #Converts M = [M] to M = [sec]
 
-        eta = self.q/(1+self.q)**2
-        M_redshifted_time = self.M*(1+self.z)*m_conv
-        M_chirp = eta**(3/5)*M_redshifted_time
-        #Source is emitting at one frequency (monochromatic)
-        #strain of instrument at f_cw
-        if strain_const == 'Rosado':
-            #Strain from Rosado, Sesana, and Gair (2015) https://arxiv.org/abs/1503.04803
-            #(ie. sky and inclination averaged)
-            #inc = 0.0 #optimally oriented
-            a = 1+np.cos(self.inc)**2
-            b = -2*np.cos(self.inc)
-            A = 2*(const.c/DL)*(np.pi*self.f_init)**(2./3.)*M_chirp**(5./3.)
-            self._h_gw = A*np.sqrt(.5*(a**2+b**2))*np.sqrt(self.T_obs)
-        elif strain_const == 'Cornish':
-            #Strain from Cornish et. al 2018 (eqn 27) https://arxiv.org/pdf/1803.01944.pdf
-            #(ie. optimally oriented)
-            self._h_gw = 8/np.sqrt(5)*np.sqrt(self.T_obs)*(const.c/DL)*(np.pi*self.f_init)**(2./3.)*M_chirp**(5./3.)
+            eta = self.q/(1+self.q)**2
+            M_redshifted_time = self.M*(1+self.z)*m_conv
+            M_chirp = eta**(3/5)*M_redshifted_time
+            #Source is emitting at one frequency (monochromatic)
+            #strain of instrument at f_cw
+            if strain_const == 'Rosado':
+                #Strain from Rosado, Sesana, and Gair (2015) https://arxiv.org/abs/1503.04803
+                #(ie. sky and inclination averaged)
+                #inc = 0.0 #optimally oriented
+                a = 1+np.cos(self.inc)**2
+                b = -2*np.cos(self.inc)
+                A = 2*(const.c/DL)*(np.pi*self.f_init)**(2./3.)*M_chirp**(5./3.)
+                self._h_gw = A*np.sqrt(.5*(a**2+b**2))*np.sqrt(self.T_obs)
+            elif strain_const == 'Cornish':
+                #Strain from Cornish et. al 2018 (eqn 27) https://arxiv.org/pdf/1803.01944.pdf
+                #(ie. optimally oriented)
+                self._h_gw = 8/np.sqrt(5)*np.sqrt(self.T_obs)*(const.c/DL)*(np.pi*self.f_init)**(2./3.)*M_chirp**(5./3.)
+        return self._h_gw
+
+    @property
+    def h_f(self):
+        if not hasattr(self,'_h_f'):
+            [phenomD_f,phenomD_h] = self.Get_PhenomD_Strain()
+            [_,self._h_f] = StrainConv(self,phenomD_f,phenomD_h)
+        return self._h_f
+    @h_f.setter
+    def h_f(self,value):
+        self._h_f = value
+
+    @property
+    def f(self):
+        if not hasattr(self,'_f'):
+            [phenomD_f,phenomD_h] = self.Get_PhenomD_Strain()
+            [self._f,_] = StrainConv(self,phenomD_f,phenomD_h)
+        return self._f
+    @f.setter
+    def f(self,value):
+        self._f = value
+    
+    
 
     def Get_fitcoeffs(self):
         fit_coeffs_filedirectory = top_directory + '/LoadFiles/PhenomDFiles/'
@@ -617,31 +826,8 @@ class BlackHoleBinary:
 
         Vars = [self.M,self.q,self.chi1,self.chi2,self.z]
 
-        [phenomD_f,phenomD_h] = PhenomD.FunPhenomD(Vars,self._fitcoeffs,self.nfreqs,f_low=self.f_low)
+        [phenomD_f,phenomD_h] = PhenomD.FunPhenomD(Vars,self._fitcoeffs,self.nfreqs,f_low=self.f_low.value)
         return [phenomD_f,phenomD_h]
-
-    def StrainConv(self,natural_f,natural_h):
-        DL = cosmo.luminosity_distance(self.z)
-        DL = DL.to('m')
-
-        m_conv = const.G*const.M_sun/const.c**3 #Converts M = [M] to M = [sec]
-        M_redshifted_time = self.M*(1+self.z)*m_conv
-        
-        freq_conv = 1/M_redshifted_time
-        #Normalized factor?
-        #Changed from sqrt(5/16/pi)
-        strain_conv = np.sqrt(1/4/np.pi)*(const.c/DL)*M_redshifted_time**2
-        
-        self.f = natural_f*freq_conv
-        self.h_f = natural_h*strain_conv
-
-    def Get_CharStrain(self):
-        if not hasattr(self,'f') or not hasattr(self,'h_f'):
-            [natural_f,natural_h] = self.Get_PhenomD_Strain()
-            self.StrainConv(natural_f,natural_h)
-
-        h_char = np.sqrt(4*self.f**2*self.h_f**2)
-        return h_char
 
     def checkFreqEvol(self):
         #####################################
@@ -681,34 +867,111 @@ class BlackHoleBinary:
     
 
 class TimeDomain:
-    def __init__(self,name):
+    def __init__(self,name,*args):
+        '''args order: M,q,z'''
         self.name = name
-        self.source_var_dict = {}
-        self.natural_f = []
-        self.natural_h_f = []
-        self.f = []
-        self.h_f = []
-        self.t = []
-        self.h_plus_t = []
-        self.h_cross_t = []
+        self.var_dict = {}
 
-    def Set_Mass(self,M,M_min=None,M_max=None):
-        self.source_var_dict['M'] = {'val':M,'min':M_min,'max':M_max}
-    def Set_MassRatio(self,q,q_min=None,q_max=None):
-        self.source_var_dict['q'] = {'val':q,'min':q_min,'max':q_max}
-    def Set_Redshift(self,z,z_min=None,z_max=None):
-        self.source_var_dict['z'] = {'val':z,'min':z_min,'max':z_max}
+        if len(args) != 0:
+            [M,q,z] = args
+            self.M = M
+            self.q = q
+            self.z = z
+        self.Load_Data()
 
-    def Get_Param_Dict(self,var_name):
-        return self.source_var_dict[var_name]
+    @property
+    def M(self):
+        return self._M
+    @M.setter
+    def M(self,value):
+        try:
+            if len(value) == 3:
+                Set_Param_val(self,'M',value[0],value[1],value[2])
+                self._M = value[0]
+        except:
+            try:
+                Update_Param_val(self,'M',value)
+            except:
+                Set_Param_val(self,'M',value,None,None)
+            self._M = value
 
-    def Load_Strain(self):
+    @property
+    def q(self):
+        return self._q
+    @q.setter
+    def q(self,value):
+        try:
+            if len(value) == 3:
+                Set_Param_val(self,'q',value[0],value[1],value[2])
+                self._q = value[0]
+        except:
+            try:
+                Update_Param_val(self,'q',value)
+            except:
+                Set_Param_val(self,'q',value,None,None)
+            self._q = value
+
+    @property
+    def z(self):
+        return self._z
+    @z.setter
+    def z(self,value):
+        try:
+            if len(value) == 3:
+                Set_Param_val(self,'z',value[0],value[1],value[2])
+                self._z = value[0]
+        except:
+            try:
+                Update_Param_val(self,'z',value)
+            except:
+                Set_Param_val(self,'z',value,None,None)
+            self._z = value
+
+    @property
+    def t(self):
+        if not hasattr(self,'_t'):
+            self._t = self._diff_data[:,0]*u.s
+        return self._t
+
+    @property
+    def h_plus_t(self):
+        if not hasattr(self,'_h_plus_t'):
+            self._h_plus_t = self._diff_data[:,1]
+        return self._h_plus_t
+
+    @property
+    def h_cross_t(self):
+        if not hasattr(self,'_h_cross_t'):
+            self._h_cross_t = self._diff_data[:,1]
+        return self._h_cross_t
+
+    @property
+    def h_f(self):
+        if not hasattr(self,'_h_f'):
+            [natural_f,natural_h] = self.Get_hf_from_hcross_hplus()
+            [_,self._h_f] = StrainConv(self,natural_f,natural_h)
+        return self._h_f
+    @h_f.setter
+    def h_f(self,value):
+        self._h_f = value
+
+    @property
+    def f(self):
+        if not hasattr(self,'_f'):
+            [natural_f,natural_h] = self.Get_hf_from_hcross_hplus()
+            [self._f,_] = StrainConv(self,natural_f,natural_h)
+        return self._f
+    @f.setter
+    def f(self,value):
+        self._f = value    
+    
+    
+    
+    def Load_Data(self):
         diff_filename = self.name + '.dat'
         diff_filelocation = top_directory + '/LoadFiles/DiffStrain/EOBdiff/' + diff_filename
-        diff_data = np.loadtxt(diff_filelocation)
-        self.t = diff_data[:,0]*u.s
-        self.h_plus_t = diff_data[:,1]
-        self.h_cross_t = diff_data[:,2]
+        self._diff_data = np.loadtxt(diff_filelocation)
+
 
     def Get_hf_from_hcross_hplus(self,interp_res='coarse',windowing='left'):
         '''Converts dimensionless, time domain strain to frequency space'''
@@ -762,44 +1025,35 @@ class TimeDomain:
         #cut=int(len(freqs)*0.9) #Cut off percentage of frequencies
         h_cross_f = h_cross_f[cut_low:cut_high]
         h_plus_f = h_plus_f[cut_low:cut_high]
-        self.natural_f = freqs[cut_low:cut_high]
+        natural_f = freqs[cut_low:cut_high]
         
         #Combine them for raw spectral power
-        self.natural_h_f = np.sqrt((np.abs(h_cross_f))**2 + (np.abs(h_plus_f))**2)
+        natural_h_f = np.sqrt((np.abs(h_cross_f))**2 + (np.abs(h_plus_f))**2)
+        return [natural_f,natural_h_f]
 
-    def Get_CharStrain(self):
-        if len(self.f) != 0 and len(self.h_f) != 0:
-            h_char = np.sqrt(4*self.f**2*self.h_f**2)
-            return h_char
-        else:
-            print('You need to get f and h_f first. \n')
-            return []
+def StrainConv(source,natural_f,natural_h):
+    DL = cosmo.luminosity_distance(source.z)
+    DL = DL.to('m')
 
-    def StrainConv(self):
-        M = self.Get_Param_Dict('M')['val']
-        q = self.Get_Param_Dict('q')['val']
-        z = self.Get_Param_Dict('z')['val']
+    m_conv = const.G*const.M_sun/const.c**3 #Converts M = [M] to M = [sec]
+    M_redshifted_time = source.M*(1+source.z)*m_conv
+    
+    freq_conv = 1/M_redshifted_time
+    #Normalized factor?
+    #Changed from sqrt(5/16/pi)
+    strain_conv = np.sqrt(1/4/np.pi)*(const.c/DL)*M_redshifted_time**2
+    
+    f = natural_f*freq_conv
+    h_f = natural_h*strain_conv
+    return [f,h_f]
 
-        DL = cosmo.luminosity_distance(z)
-        DL = DL.to('m')
-
-        m_conv = const.G*const.M_sun/const.c**3 #Converts M = [M] to M = [sec]
-        M_redshifted_time = M*(1+z)*m_conv
-        
-        freq_conv = 1/M_redshifted_time
-        #Normalized factor?
-        #Changed from sqrt(5/16/pi)
-        strain_conv = np.sqrt(1/4/np.pi)*(const.c/DL)*M_redshifted_time**2
-        
-        self.f = self.natural_f*freq_conv
-        self.h_f = self.natural_h_f*strain_conv
-
-    def Default_Setup(self,M,q,z):
-        self.Get_hf_from_hcross_hplus()
-        self.Set_Mass(M)
-        self.Set_MassRatio(q)
-        self.Set_Redshift(z)
-        self.StrainConv()
+def Get_CharStrain(source):
+    if hasattr(source,'f') and hasattr(source,'h_f'):
+        h_char = np.sqrt(4*source.f**2*source.h_f**2)
+        return h_char
+    else:
+        print('You need to get f and h_f first. \n')
+        return []
 
 def Get_Param_Dict(obj,var_name):
     return obj.var_dict[var_name]
