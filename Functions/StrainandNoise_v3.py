@@ -123,7 +123,7 @@ class PTA:
     def fT(self,value):
         self._fT = value
     @fT.deleter
-    def fT(self,value):
+    def fT(self):
         del self._fT
 
     @property
@@ -142,7 +142,7 @@ class PTA:
     def h_n_f(self,value):
         self._h_n_f = value
     @h_n_f.deleter
-    def h_n_f(self,value):
+    def h_n_f(self):
         del self._h_n_f
     
     @property
@@ -152,7 +152,7 @@ class PTA:
             if self.Strain_Calc_Type == 'approx':
                 self._S_n_f = self.Get_ASD_Moore_2014()
             elif self.Strain_Calc_Type == 'sim':
-                self._S_n_ft = self.Get_ASD_Hazboun_2019()
+                self._S_n_f = self.Get_ASD_Hazboun_2019()
             else:
                 self.Set_Strain_Calc_Type()
                 self.S_n_f
@@ -161,7 +161,7 @@ class PTA:
     def S_n_f(self,value):
         self._S_n_f = value
     @S_n_f.deleter
-    def S_n_f(self,value):
+    def S_n_f(self):
         del self._S_n_f
 
     @property
@@ -331,7 +331,7 @@ class GroundBased:
         self._S_n_f = S_n_f_sqrt**2/(u.Hz)
         return self._S_n_f
     @S_n_f.deleter
-    def S_n_f(self,value):
+    def S_n_f(self):
         del self._S_n_f
 
     @property
@@ -339,7 +339,7 @@ class GroundBased:
         self._fT = self._I_data[:,0]*u.Hz
         return self._fT
     @fT.deleter
-    def fT(self,value):
+    def fT(self):
         del self._fT
     
     @property
@@ -348,7 +348,7 @@ class GroundBased:
         self._h_n_f = np.sqrt(self.fT*self.S_n_f)
         return self._h_n_f
     @h_n_f.deleter
-    def h_n_f(self,value):
+    def h_n_f(self):
         del self._h_n_f
 
     @property
@@ -375,11 +375,10 @@ class SpaceBased:
         kwargs can be:
         load_location: If you want to load a PTA curve from a file, 
                         it's the file path
-        Background: Add in a stochastic gravitational wave background,
-                    only affects the Moore, Taylor, and Gair 2015 model
-        f_low: Assigned lowest frequency of PTA (default assigns 1/(5*T_obs))
-        f_high: Assigned highest frequency of PTA (default is Nyquist freq cadence/2)
-        nfreqs: Number of frequencies in logspace the sensitivity is calculated
+        Background: Add in a Galactic Binary Confusion Noise
+        f_low: Assigned lowest frequency of instrument (default assigns 10^-5Hz)
+        f_high: Assigned highest frequency of instrument (default is 1Hz)
+        nfreqs: Number of frequencies in logspace the sensitivity is calculated (default is 1e3)
         '''
         self.name = name
         for keys,value in kwargs.items():
@@ -497,7 +496,7 @@ class SpaceBased:
             self._P_n_f = (P_IMS + 2*(1+np.cos(self.fT.value/f_trans.value)**2)*P_acc)/self.L**2
         return self._P_n_f
     @P_n_f.deleter
-    def P_n_f(self,value):
+    def P_n_f(self):
         del self._P_n_f
 
     @property
@@ -509,9 +508,9 @@ class SpaceBased:
                     S_n_f_sqrt = self._I_data[:,1]
                     self._S_n_f = S_n_f_sqrt**2/(u.Hz)
                 elif self._I_Type == 'ENSD':
-                    self.S_n_f = self._I_data[:,1]/u.Hz
+                    self._S_n_f = self._I_data[:,1]/u.Hz
                 elif self._I_Type == 'h':
-                    self.S_n_f = self.h_n_f**2/self.fT
+                    self._S_n_f = self.h_n_f**2/self.fT
             else:
                 S_n_f = self.P_n_f/self.transferfunction**2 
                 if self.Background:
@@ -520,7 +519,7 @@ class SpaceBased:
                     self._S_n_f = S_n_f
         return self._S_n_f
     @S_n_f.deleter
-    def S_n_f(self,value):
+    def S_n_f(self):
         del self._S_n_f
 
     @property
@@ -533,7 +532,7 @@ class SpaceBased:
                 self._h_n_f = np.sqrt(self.fT*self.S_n_f)
         return self._h_n_f
     @h_n_f.deleter
-    def h_n_f(self,value):
+    def h_n_f(self):
         del self._h_n_f
 
     def Load_Data(self,load_location):
@@ -544,9 +543,9 @@ class SpaceBased:
         I_type = input('Please enter one of the answers in quotations: ')
         if I_type == 'E' or I_type == 'e':
             self._I_Type = 'ENSD'
-        elif I_type == 'A':
+        elif I_type == 'A' or I_type == 'a':
             self._I_Type = 'ASD'
-        elif I_type == 'h':
+        elif I_type == 'h' or I_type == 'H':
             self._I_Type = 'h'
         else:
             print('Please choose either "E","A", "h", or convert to one of these.\n')
@@ -575,8 +574,11 @@ class SpaceBased:
         self.fT = LISA_Transfer_Function_f[idx_f_5:idx_f_1]
 
     def Get_Analytic_Transfer_Function(self):
-        #Response function approximation from Calculation described by Neil Cornish (unpublished)
-        self.fT = np.logspace(np.log10(self.f_low.value),np.log10(self.f_high.value),self.nfreqs)*u.Hz
+        #Response function approximation from Calculation described by Cornish, Robson, Liu 2019
+        if isinstance(self.f_low,u.Quantity) and isinstance(self.f_low,u.Quantity):
+            self.fT = np.logspace(np.log10(self.f_low.value),np.log10(self.f_high.value),self.nfreqs)*u.Hz
+        else:
+            self.fT = np.logspace(np.log10(self.f_low),np.log10(self.f_high),self.nfreqs)*u.Hz
         f_L = const.c/2/np.pi/self.L #Transfer frequency
         R_f = 3/10/(1+0.6*(self.fT/f_L)**2) 
         self.transferfunction = np.sqrt(R_f)
@@ -592,7 +594,7 @@ class SpaceBased:
             self._Tfunction_Type = 'analytic'
         else:
             print('Please choose either analytic: "A" or numeric: "N".\n')
-            self.Set_Strain_Calc_Type()
+            self.Set_Tfunction_Type()
         if hasattr(self,'_Tfunction_Type'):
             if self._Tfunction_Type == 'numeric':
                 self.Get_Numeric_Transfer_Function()
@@ -716,8 +718,13 @@ class BlackHoleBinary:
         self._T_obs = value
 
     @property
-    def h_gw(self,strain_const='Cornish'):
+    def h_gw(self):
         if not hasattr(self,'_h_gw'):
+            self.h_gw = 'Rosado'
+        return self._h_gw
+    @h_gw.setter
+    def h_gw(self,strain_const):
+        if isinstance(strain_const,str):
             DL = cosmo.luminosity_distance(self.z)
             DL = DL.to('m')
 
@@ -734,41 +741,47 @@ class BlackHoleBinary:
                 #inc = 0.0 #optimally oriented
                 a = 1+np.cos(self.inc)**2
                 b = -2*np.cos(self.inc)
-                A = 2*(const.c/DL)*(np.pi*self.f_init)**(2./3.)*M_chirp**(5./3.)
-                self._h_gw = A*np.sqrt(.5*(a**2+b**2))*np.sqrt(self.T_obs)
+                const_val = 2*np.sqrt(.5*(a**2+b**2))
             elif strain_const == 'Cornish':
                 #Strain from Cornish et. al 2018 (eqn 27) https://arxiv.org/pdf/1803.01944.pdf
                 #(ie. optimally oriented)
-                self._h_gw = 8/np.sqrt(5)*np.sqrt(self.T_obs)*(const.c/DL)*(np.pi*self.f_init)**(2./3.)*M_chirp**(5./3.)
-        return self._h_gw
+                const_val = 8/np.sqrt(5)
+            else:
+                raise ValueError('Can only use "Cornish" or "Rosado" monochromatic strain calculation.')
+
+            self._h_gw = const_val*np.sqrt(self.T_obs)*(const.c/DL)*(np.pi*self.f_init)**(2./3.)*M_chirp**(5./3.)
+        else:
+            raise ValueError('Can only use "Cornish" or "Rosado" monochromatic strain calculation.')
     @h_gw.deleter
-    def h_gw(self,value):
+    def h_gw(self):
         del self._h_gw
 
     @property
     def h_f(self):
         if not hasattr(self,'_h_f'):
-            [phenomD_f,phenomD_h] = self.Get_PhenomD_Strain()
-            [_,self._h_f] = StrainConv(self,phenomD_f,phenomD_h)
+            if not (hasattr(self,'_phenomD_f') and hasattr(self,'_phenomD_h')):
+                self.Get_PhenomD_Strain()
+            [self.f,self._h_f] = StrainConv(self,self._phenomD_f,self._phenomD_h)
         return self._h_f
     @h_f.setter
     def h_f(self,value):
         self._h_f = value
     @h_f.deleter
-    def h_f(self,value):
+    def h_f(self):
         del self._h_f
 
     @property
     def f(self):
         if not hasattr(self,'_f'):
-            [phenomD_f,phenomD_h] = self.Get_PhenomD_Strain()
-            [self._f,_] = StrainConv(self,phenomD_f,phenomD_h)
+            if not (hasattr(self,'_phenomD_f') and hasattr(self,'_phenomD_h')):
+                self.Get_PhenomD_Strain()
+            [self._f,self.h] = StrainConv(self,self._phenomD_f,self._phenomD_h)
         return self._f
     @f.setter
     def f(self,value):
         self._f = value
     @f.deleter
-    def f(self,value):
+    def f(self):
         del self._f
     
     @property
@@ -790,8 +803,7 @@ class BlackHoleBinary:
 
         Vars = [self.M,self.q,self.chi1,self.chi2,self.z]
 
-        [phenomD_f,phenomD_h] = PhenomD.FunPhenomD(Vars,self._fitcoeffs,self.nfreqs,f_low=self.f_low.value)
-        return [phenomD_f,phenomD_h]
+        [self._phenomD_f,self._phenomD_h] = PhenomD.FunPhenomD(Vars,self._fitcoeffs,self.nfreqs,f_low=self.f_low.value)
 
     def checkFreqEvol(self):
         #####################################
@@ -895,7 +907,7 @@ class TimeDomain:
     def h_f(self,value):
         self._h_f = value
     @h_f.deleter
-    def h_f(self,value):
+    def h_f(self):
         del self._h_f
 
     @property
@@ -908,7 +920,7 @@ class TimeDomain:
     def f(self,value):
         self._f = value
     @f.deleter
-    def f(self,value):
+    def f(self):
         del self._f  
     
     def Load_Data(self):
