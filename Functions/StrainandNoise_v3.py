@@ -742,6 +742,8 @@ class BlackHoleBinary:
                 a = 1+np.cos(self.inc)**2
                 b = -2*np.cos(self.inc)
                 const_val = 2*np.sqrt(.5*(a**2+b**2))
+            elif strain_const == 'Hazboun':
+            	const_val = 4.
             elif strain_const == 'Cornish':
                 #Strain from Cornish et. al 2018 (eqn 27) https://arxiv.org/pdf/1803.01944.pdf
                 #(ie. optimally oriented)

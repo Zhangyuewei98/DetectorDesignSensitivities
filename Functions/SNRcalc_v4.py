@@ -196,7 +196,7 @@ def calcMonoSNR(source,instrument):
     #From Moore,Taylor,and Gair 2015 https://arxiv.org/abs/1406.5199
 
     if isinstance(instrument,SnN.PTA):
-        source.h_gw = 'Rosado'
+        source.h_gw = 'Hazboun'
     else:
         source.h_gw = 'Cornish'
 
@@ -233,7 +233,7 @@ def calcChirpSNR(source,instrument):
         denom = S_n_f_interp #Sky Averaged Noise Spectral Density
         numer = h_cut**2
 
-        integral_consts = 4#60*np.pi**2
+        integral_consts = 2*instrument.T_obs.value
 
         integrand = numer/denom
         if isinstance(integrand,u.Quantity) and isinstance(f_cut,u.Quantity):
@@ -246,7 +246,7 @@ def calcChirpSNR(source,instrument):
         denom = S_n_f_interp #Sky Averaged Noise Spectral Density
         numer = h_cut**2
 
-        integral_consts = 64/5
+        integral_consts = 16/5
 
         integrand = numer/denom
         if isinstance(integrand,u.Quantity) and isinstance(f_cut,u.Quantity):
