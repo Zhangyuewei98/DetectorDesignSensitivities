@@ -603,15 +603,28 @@ class SpaceBased:
 
 
     def Add_Background(self):
-        #4 year Galactic confusions noise parameters
-        A = 9e-45
-        a = 0.138
-        b = -221
-        k = 521
-        g = 1680
-        f_k = 0.00113
+        '''
+        Galactic confusions noise parameters for 6months, 1yr, 2yr, and 4yr
+        	corresponding to array index 0,1,2,3 respectively
+		'''
+		A = 9e-45
+        a = np.array([0.133,0.171,0.165,0.138])
+        b = np.array([243,292,299,-221])
+        k = np.array([482,1020,611,521])
+        g = np.array([917,1680,1340,1680])
+        f_k = np.array([0.00258,0.00215,0.00173,0.00113])
+
+		if self.T_obs < 1.*u.yr:
+			index = 0
+		elif self.T_obs >= 1.*u.yr and self.T_obs < 2.*u.yr:
+			index = 1
+		elif self.T_obs >= 2.*u.yr and self.T_obs < 4.*u.yr:
+			index = 2
+		else:
+			index = 3
         f = self.fT.value
-        return A*np.exp(-(f**a)+(b*f*np.sin(k*f)))*(f**(-7/3))*(1 + np.tanh(g*(f_k-f))) #White Dwarf Background Noise
+        return A*np.exp(-(f**a[index])+(b[index]*f*np.sin(k[index]*f)))\
+        		*(f**(-7/3))*(1 + np.tanh(g[index]*(f_k[index]-f))) #White Dwarf Background Noise
 
 
 
