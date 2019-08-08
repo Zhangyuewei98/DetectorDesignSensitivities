@@ -362,7 +362,7 @@ class GroundBased:
 
 class SpaceBased:
     def __init__(self,name,*args,**kwargs):
-        '''arg order: T_obs,L,A_acc,f_acc_break_low,f_acc_break_high,A_IMS,f_IMS_break'''
+        '''arg order: T_obs,L,A_acc,f_acc_break_low,f_acc_break_high,A_IFO,f_IMS_break'''
         '''
         name - name of the instrument
         args in order: 
@@ -371,7 +371,7 @@ class SpaceBased:
         A_acc - the Amplitude of the Acceleration Noise in [meters/second^2]
         f_acc_break_low = the lower break frequency of the acceleration noise in [Hz]
         f_acc_break_high = the higher break frequency of the acceleration noise in [Hz]
-        A_IMS = the amplitude of the interferometer 
+        A_IFO = the amplitude of the interferometer 
         kwargs can be:
         load_location: If you want to load a PTA curve from a file, 
                         it's the file path
@@ -403,13 +403,13 @@ class SpaceBased:
             self.Background = False
 
         if len(args) != 0:
-            [T_obs,L,A_acc,f_acc_break_low,f_acc_break_high,A_IMS,f_IMS_break] = args
+            [T_obs,L,A_acc,f_acc_break_low,f_acc_break_high,A_IFO,f_IMS_break] = args
             self.T_obs = T_obs
             self.L = L
             self.A_acc = A_acc
             self.f_acc_break_low = f_acc_break_low
             self.f_acc_break_high = f_acc_break_high
-            self.A_IMS = A_IMS
+            self.A_IFO = A_IFO
             self.f_IMS_break = f_IMS_break
             self.Set_Tfunction_Type()
 
@@ -454,12 +454,12 @@ class SpaceBased:
         self._f_acc_break_high = self._return_value
 
     @property
-    def A_IMS(self):
-        return self._A_IMS
-    @A_IMS.setter
-    def A_IMS(self,value):
-        self.var_dict = ['A_IMS',value]
-        self._A_IMS = self._return_value
+    def A_IFO(self):
+        return self._A_IFO
+    @A_IFO.setter
+    def A_IFO(self,value):
+        self.var_dict = ['A_IFO',value]
+        self._A_IFO = self._return_value
 
     @property
     def f_IMS_break(self):
@@ -490,7 +490,7 @@ class SpaceBased:
                 self.Set_Tfunction_Type()
 
             P_acc = self.A_acc**2*(1+(self.f_acc_break_low/self.fT)**2)*(1+(self.fT/(self.f_acc_break_high))**4)/(2*np.pi*self.fT)**4 #Acceleration Noise 
-            P_IMS = self.A_IMS**2*(1+(self.f_IMS_break/self.fT)**4) #Displacement noise of the interferometric TM--to-TM 
+            P_IMS = self.A_IFO**2*(1+(self.f_IMS_break/self.fT)**4) #Displacement noise of the interferometric TM--to-TM 
 
             f_trans = const.c/2/np.pi/self.L #Transfer frequency
             self._P_n_f = (P_IMS + 2*(1+np.cos(self.fT.value/f_trans.value)**2)*P_acc)/self.L**2
@@ -605,26 +605,26 @@ class SpaceBased:
     def Add_Background(self):
         '''
         Galactic confusions noise parameters for 6months, 1yr, 2yr, and 4yr
-        	corresponding to array index 0,1,2,3 respectively
-		'''
-		A = 9e-45
+            corresponding to array index 0,1,2,3 respectively
+        '''
+        A = 9e-45
         a = np.array([0.133,0.171,0.165,0.138])
         b = np.array([243,292,299,-221])
         k = np.array([482,1020,611,521])
         g = np.array([917,1680,1340,1680])
         f_k = np.array([0.00258,0.00215,0.00173,0.00113])
 
-		if self.T_obs < 1.*u.yr:
-			index = 0
-		elif self.T_obs >= 1.*u.yr and self.T_obs < 2.*u.yr:
-			index = 1
-		elif self.T_obs >= 2.*u.yr and self.T_obs < 4.*u.yr:
-			index = 2
-		else:
-			index = 3
+        if self.T_obs < 1.*u.yr:
+            index = 0
+        elif self.T_obs >= 1.*u.yr and self.T_obs < 2.*u.yr:
+            index = 1
+        elif self.T_obs >= 2.*u.yr and self.T_obs < 4.*u.yr:
+            index = 2
+        else:
+            index = 3
         f = self.fT.value
         return A*np.exp(-(f**a[index])+(b[index]*f*np.sin(k[index]*f)))\
-        		*(f**(-7/3))*(1 + np.tanh(g[index]*(f_k[index]-f))) #White Dwarf Background Noise
+                *(f**(-7/3))*(1 + np.tanh(g[index]*(f_k[index]-f))) #White Dwarf Background Noise
 
 
 
@@ -733,7 +733,7 @@ class BlackHoleBinary:
     @property
     def h_gw(self):
         if not hasattr(self,'_h_gw'):
-            self.h_gw = 'Rosado'
+            self.h_gw = 'Averaged'
         return self._h_gw
     @h_gw.setter
     def h_gw(self,strain_const):
@@ -748,25 +748,22 @@ class BlackHoleBinary:
             M_chirp = eta**(3/5)*M_redshifted_time
             #Source is emitting at one frequency (monochromatic)
             #strain of instrument at f_cw
-            if strain_const == 'Rosado':
+            if strain_const == 'UseInc':
                 #Strain from Rosado, Sesana, and Gair (2015) https://arxiv.org/abs/1503.04803
-                #(ie. sky and inclination averaged)
                 #inc = 0.0 #optimally oriented
                 a = 1+np.cos(self.inc)**2
                 b = -2*np.cos(self.inc)
                 const_val = 2*np.sqrt(.5*(a**2+b**2))
-            elif strain_const == 'Hazboun':
-            	const_val = 4.
-            elif strain_const == 'Cornish':
-                #Strain from Cornish et. al 2018 (eqn 27) https://arxiv.org/pdf/1803.01944.pdf
-                #(ie. optimally oriented)
+            elif strain_const == 'Averaged':
+                #Strain from Robson et al. 2019 (eqn 27) https://arxiv.org/pdf/1803.01944.pdf
+                #(ie. #(ie. sky and inclination averaged 4 * sqrt(4/5))
                 const_val = 8/np.sqrt(5)
             else:
-                raise ValueError('Can only use "Cornish" or "Rosado" monochromatic strain calculation.')
+                raise ValueError('Can only use "UseInc" or "Averaged" monochromatic strain calculation.')
 
             self._h_gw = const_val*np.sqrt(self.T_obs)*(const.c/DL)*(np.pi*self.f_init)**(2./3.)*M_chirp**(5./3.)
         else:
-            raise ValueError('Can only use "Cornish" or "Rosado" monochromatic strain calculation.')
+            raise ValueError('Can only use "UseInc" or "Averaged" monochromatic strain calculation.')
     @h_gw.deleter
     def h_gw(self):
         del self._h_gw

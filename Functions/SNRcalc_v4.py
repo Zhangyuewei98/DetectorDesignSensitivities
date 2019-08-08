@@ -193,13 +193,6 @@ def Handle_Units(sample_x,var_x,sample_y,var_y):
 
 def calcMonoSNR(source,instrument):
     #SNR for a monochromatic source in a PTA
-    #From Moore,Taylor,and Gair 2015 https://arxiv.org/abs/1406.5199
-
-    if isinstance(instrument,SnN.PTA):
-        source.h_gw = 'Hazboun'
-    else:
-        source.h_gw = 'Cornish'
-
     indxfgw = np.abs(instrument.fT-source.f_init).argmin()
 
     return source.h_gw/np.sqrt(instrument.S_n_f[indxfgw])
@@ -233,7 +226,7 @@ def calcChirpSNR(source,instrument):
         denom = S_n_f_interp #Sky Averaged Noise Spectral Density
         numer = h_cut**2
 
-        integral_consts = 2*instrument.T_obs.value
+        integral_consts = 4.
 
         integrand = numer/denom
         if isinstance(integrand,u.Quantity) and isinstance(f_cut,u.Quantity):
@@ -241,12 +234,12 @@ def calcChirpSNR(source,instrument):
         else:
             SNRsqrd = integral_consts*np.trapz(integrand,f_cut,axis=0) #SNR**2
 
-    elif isinstance(instrument,SnN.SpaceBased):
+    elif isinstance(instrument,SnN.SpaceBased) or isinstance(instrument,SnN.GroundBased):
         #CALCULATE SNR FOR BOTH NOISE CURVES
         denom = S_n_f_interp #Sky Averaged Noise Spectral Density
         numer = h_cut**2
 
-        integral_consts = 16/5
+        integral_consts = 16./5.
 
         integrand = numer/denom
         if isinstance(integrand,u.Quantity) and isinstance(f_cut,u.Quantity):
@@ -254,18 +247,6 @@ def calcChirpSNR(source,instrument):
         else:
             SNRsqrd = integral_consts*np.trapz(integrand,f_cut,axis=0) #SNR**2
 
-    elif isinstance(instrument,SnN.GroundBased):
-        #CALCULATE SNR FOR BOTH NOISE CURVES
-        denom = S_n_f_interp #Sky Averaged Noise Spectral Density
-        numer = h_cut**2
-
-        integral_consts = 8/5 # 4 or(4*2/5) from sky/inclination/polarization averaging
-
-        integrand = numer/denom
-        if isinstance(integrand,u.Quantity) and isinstance(f_cut,u.Quantity):
-            SNRsqrd = integral_consts*np.trapz(integrand.value,f_cut.value,axis=0) #SNR**2
-        else:
-            SNRsqrd = integral_consts*np.trapz(integrand,f_cut,axis=0) #SNR**2
     return np.sqrt(SNRsqrd)
 
 def calcDiffSNR(source,instrument):
