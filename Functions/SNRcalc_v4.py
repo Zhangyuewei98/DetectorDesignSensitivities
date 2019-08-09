@@ -122,6 +122,8 @@ def Get_Samples(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y):
     elif var_y in instrument.var_dict.keys():
         if recalculate_noise == 'x':
             recalculate_noise = 'both'
+        else:
+            recalculate_noise = 'y'
         var_y_dict = instrument.var_dict[var_y]
     else:
         raise ValueError(var_y + ' is not a variable in the source or the instrument.')
@@ -135,9 +137,13 @@ def Get_Samples(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y):
             #sample in linear space for instrument variables
             #Need exception for astropy variables
             if isinstance(var_x_dict['min'],u.Quantity) and isinstance(var_x_dict['max'],u.Quantity):
-                sample_x = np.linspace(var_x_dict['min'].value,var_x_dict['max'].value,sampleRate_x)
+                T_obs_min = var_x_dict['min'].to('s')
+                T_obs_max = var_x_dict['max'].to('s')
+                sample_x = np.linspace(T_obs_min.value,T_obs_max.value,sampleRate_x)
             else:
-                sample_x = np.linspace(var_x_dict['min'],var_x_dict['max'],sampleRate_x)
+                T_obs_min = var_x_dict['min']*u.yr.to('s')
+                T_obs_max = var_x_dict['max']*u.yr.to('s')
+                sample_x = np.linspace(T_obs_min,T_obs_max,sampleRate_x)
         else:
             #Sample in log space for any other variables
             #Need exception for astropy variables
@@ -155,9 +161,13 @@ def Get_Samples(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y):
             #sample in linear space for instrument variables
             #Need exception for astropy variables
             if isinstance(var_y_dict['min'],u.Quantity) and isinstance(var_y_dict['max'],u.Quantity):
-                sample_y = np.linspace(var_y_dict['min'].value,var_y_dict['max'].value,sampleRate_y)
+                T_obs_min = var_y_dict['min'].to('s')
+                T_obs_max = var_y_dict['max'].to('s')
+                sample_y = np.linspace(T_obs_min.value,T_obs_max.value,sampleRate_y)
             else:
-                sample_y = np.linspace(var_y_dict['min'],var_y_dict['max'],sampleRate_y)
+                T_obs_min = var_y_dict['min']*u.yr.to('s')
+                T_obs_max = var_y_dict['max']*u.yr.to('s')
+                sample_y = np.linspace(T_obs_min,T_obs_max,sampleRate_y)
         else:
             #Sample in log space for any other variables 
             #Need exception for astropy variables
@@ -173,7 +183,7 @@ def Handle_Units(sample_x,var_x,sample_y,var_y):
     #Handle x variables
     if var_x == 'L' or var_x == 'A_IMS':
         sample_x = sample_x*u.m
-    elif var_x == 'T_obs' or var_x == 'rms':
+    elif var_x == 'T_obs' or var_x == 'sigma':
         sample_x = sample_x*u.s
     elif var_x == 'A_acc':
         sample_x = sample_x*u.m/u.s/u.s
@@ -182,7 +192,7 @@ def Handle_Units(sample_x,var_x,sample_y,var_y):
     #Handle y variables
     if var_y == 'L' or var_y == 'A_IMS':
         sample_y = sample_y*u.m
-    elif var_y == 'T_obs' or var_y == 'rms':
+    elif var_y == 'T_obs' or var_y == 'sigma':
         sample_y = sample_y*u.s
     elif var_y == 'A_acc':
         sample_y = sample_y*u.m/u.s/u.s
@@ -276,13 +286,14 @@ def calcDiffSNR(source,instrument):
     SNR = np.sqrt(SNRsqrd)
     return SNR
 
-def plotSNR(source,instrument,var_x,sample_x,var_y,sample_y,SNRMatrix,display=True,dl_axis=False,figloc=None):
+def plotSNR(source,instrument,var_x,sample_x,var_y,sample_y,SNRMatrix,display=True,dl_axis=False,smooth_contours=False,figloc=None):
     '''Plots the SNR contours from calcSNR'''
     #Selects contour levels to separate sections into
+    '''contLevels_max = round(max(SNRMatrix))
     contLevels = np.array([5,10, 1e2, 1e3, 1e4, 1e5, 1e6])
     #contLevels = np.array([1,10, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7,1e8,1e9])
     #contLevels = np.array([1,10, 1e2, 1e3, 1e4])
-    logLevels = np.log10(contLevels)
+    logLevels = np.log10(contLevels)'''
     axissize = 14
     labelsize = 16
     textsize = 11
@@ -290,13 +301,17 @@ def plotSNR(source,instrument,var_x,sample_x,var_y,sample_y,SNRMatrix,display=Tr
     linesize = 4
     figsize = (10,8)
 
-    contourcolorPresent = 'plasma'
-    transparencyPresent = 1.0
-    contourcolorFuture = 'plasma'
-    transparencyFuture = 1.0
-    colornorm = colors.Normalize(vmin=0.0, vmax=5.0)
     colormap = 'viridis'
     logSNR = np.log10(SNRMatrix)
+
+    logLevels_min = np.log10(np.array([5]))
+    logLevels_max = np.ceil(np.amax(logSNR))
+    print_logLevels = np.append(logLevels_min,np.arange(1,logLevels_max+1))
+    if smooth_contours:
+        logLevels = np.linspace(logLevels_min,logLevels_max,100)
+    else:
+        logLevels = print_logLevels
+
 
     if var_x in source.var_dict.keys():
         if isinstance(source.var_dict[var_x]['min'],u.Quantity):
@@ -312,6 +327,9 @@ def plotSNR(source,instrument,var_x,sample_x,var_y,sample_y,SNRMatrix,display=Tr
         else:
             xlabel_min = instrument.var_dict[var_x]['min']
             xlabel_max = instrument.var_dict[var_x]['max']
+        if var_x == 'T_obs':
+            xlabel_min = xlabel_min*u.yr.to('s')
+            xlabel_max = xlabel_max*u.yr.to('s')
     else:
         raise ValueError(var_x + ' is not a variable in the source or the instrument.')
 
@@ -329,6 +347,9 @@ def plotSNR(source,instrument,var_x,sample_x,var_y,sample_y,SNRMatrix,display=Tr
         else:
             ylabel_min = instrument.var_dict[var_y]['min']
             ylabel_max = instrument.var_dict[var_y]['max']
+        if var_y == 'T_obs':
+            ylabel_min = ylabel_min*u.yr.to('s')
+            ylabel_max = ylabel_max*u.yr.to('s')
     else:
         raise ValueError(var_y + ' is not a variable in the source or the instrument.')
 
@@ -336,7 +357,7 @@ def plotSNR(source,instrument,var_x,sample_x,var_y,sample_y,SNRMatrix,display=Tr
     if isinstance(sample_x,u.Quantity):
         sample_x = sample_x.value
     if isinstance(sample_y,u.Quantity):
-        sample_x = sample_y.value
+        sample_y = sample_y.value
 
     #Set whether log or linearly spaced axes
     if var_x == 'q' or var_x == 'chi1' or var_x == 'chi2':
@@ -351,90 +372,106 @@ def plotSNR(source,instrument,var_x,sample_x,var_y,sample_y,SNRMatrix,display=Tr
 
     #########################
     #Make the Contour Plots
-    fig, ax = plt.subplots(figsize=figsize)
+    fig, ax1 = plt.subplots(figsize=figsize)
+    #Set other side y-axis for lookback time scalings
+    ax2 = ax1.twinx()
 
     #Set axis scales based on what data sampling we used 
     if yaxis_type == 'lin' and xaxis_type == 'log':
-        CS1 = ax.contourf(np.log10(sample_x),sample_y,logSNR,logLevels,cmap = colormap)
-        ax.set_xlim(np.log10(xlabel_min),np.log10(xlabel_max))
-        ax.set_ylim(ylabel_min,ylabel_max)
+        CS1 = ax1.contourf(np.log10(sample_x),sample_y,logSNR,logLevels,cmap = colormap)
+        ax2.contour(np.log10(sample_x),sample_y,logSNR,print_logLevels,colors = 'k',alpha=1.0)
+        ax1.set_xlim(np.log10(xlabel_min),np.log10(xlabel_max))
+        ax1.set_ylim(ylabel_min,ylabel_max)
         x_labels = np.logspace(np.log10(xlabel_min),np.log10(xlabel_max),np.log10(xlabel_max)-np.log10(xlabel_min)+1)
         y_labels = np.linspace(ylabel_min,ylabel_max,ylabel_max-ylabel_min+1)
-        ax.set_yticks(y_labels)
-        ax.set_xticks(np.log10(x_labels))
+        ax1.set_yticks(y_labels)
+        ax1.set_xticks(np.log10(x_labels))
     elif yaxis_type == 'log' and xaxis_type == 'lin':
-        CS1 = ax.contourf(sample_x,np.log10(sample_y),logSNR,logLevels,cmap = colormap)
-        ax.set_xlim(xlabel_min,xlabel_max)
-        ax.set_ylim(np.log10(ylabel_min),np.log10(ylabel_max))
+        CS1 = ax1.contourf(sample_x,np.log10(sample_y),logSNR,logLevels,cmap = colormap)
+        ax2.contour(sample_x,np.log10(sample_y),logSNR,print_logLevels,colors = 'k',alpha=1.0)
+        ax1.set_xlim(xlabel_min,xlabel_max)
+        ax1.set_ylim(np.log10(ylabel_min),np.log10(ylabel_max))
         x_labels = np.linspace(xlabel_min,xlabel_max,xlabel_max-xlabel_min+1)
         y_labels = np.logspace(np.log10(ylabel_min),np.log10(ylabel_max),np.log10(ylabel_max)-np.log10(ylabel_min)+1)
-        ax.set_xticks(x_labels)
-        ax.set_yticks(np.log10(y_labels))
+        ax1.set_xticks(x_labels)
+        ax1.set_yticks(np.log10(y_labels))
     else:
-        CS1 = ax.contourf(np.log10(sample_x),np.log10(sample_y),logSNR,logLevels,cmap = colormap)
-        ax.set_xlim(np.log10(xlabel_min),np.log10(xlabel_max))
-        ax.set_ylim(np.log10(ylabel_min),np.log10(ylabel_max))
+        CS1 = ax1.contourf(np.log10(sample_x),np.log10(sample_y),logSNR,logLevels,cmap = colormap)
+        ax2.contour(np.log10(sample_x),np.log10(sample_y),logSNR,print_logLevels,colors = 'k',alpha=1.0)
+        ax1.set_xlim(np.log10(xlabel_min),np.log10(xlabel_max))
+        ax1.set_ylim(np.log10(ylabel_min),np.log10(ylabel_max))
         x_labels = np.logspace(np.log10(xlabel_min),np.log10(xlabel_max),np.log10(xlabel_max)-np.log10(xlabel_min)+1)
         y_labels = np.logspace(np.log10(ylabel_min),np.log10(ylabel_max),np.log10(ylabel_max)-np.log10(ylabel_min)+1)
-        ax.set_yticks(np.log10(y_labels))
-        ax.set_xticks(np.log10(x_labels))
+        ax1.set_yticks(np.log10(y_labels))
+        ax1.set_xticks(np.log10(x_labels))
 
     #Set axes labels and whether log or linearly spaced
     if var_x == 'M':
-        ax.set_xlabel(r'$M_{\rm tot}$ $[M_{\odot}]$',fontsize = labelsize)
-        ax.set_xticklabels([r'$10^{%i}$' %x if int(x) > 1 else r'$%i$' %(10**x) for x in np.log10(x_labels)],fontsize = axissize)
+        ax1.set_xlabel(r'$M_{\rm tot}$ $[M_{\odot}]$',fontsize = labelsize)
+        ax1.set_xticklabels([r'$10^{%i}$' %x if int(x) > 1 else r'$%i$' %(10**x) for x in np.log10(x_labels)],fontsize = axissize)
     elif var_x == 'q':
-        ax.set_xlabel(r'$q$',fontsize = labelsize)
-        ax.set_xticklabels(x_labels,fontsize = axissize)
+        ax1.set_xlabel(r'$q$',fontsize = labelsize)
+        ax1.set_xticklabels(x_labels,fontsize = axissize)
     elif var_x == 'z':
-        ax.set_xlabel(r'${\rm Redshift}$',fontsize = labelsize)
-        ax.set_xticklabels([x if int(x) < 1 else int(x) for x in x_labels],fontsize = axissize)
+        ax1.set_xlabel(r'${\rm Redshift}$',fontsize = labelsize)
+        ax1.set_xticklabels([x if int(x) < 1 else int(x) for x in x_labels],fontsize = axissize)
     elif var_x == 'chi1' or var_x == 'chi2':
-        ax.set_xlabel(r'${\rm Spin}$',fontsize = labelsize)
-        ax.set_xticklabels(x_labels,fontsize = axissize)
+        ax1.set_xlabel(r'${\rm Spin}$',fontsize = labelsize)
+        ax1.set_xticklabels(x_labels,fontsize = axissize)
     elif var_x == 'L':
-        ax.set_xlabel(r'${\rm Armlength}$ $[m]$',fontsize = labelsize)
-        ax.set_xticklabels([r'$10^{%i}$' %x if int(x) > 1 else r'$%i$' %(10**x) for x in np.log10(x_labels)],fontsize = axissize)
+        ax1.set_xlabel(r'${\rm Armlength}$ $[m]$',fontsize = labelsize)
+        ax1.set_xticklabels([r'$10^{%i}$' %x if int(x) > 1 else r'$%i$' %(10**x) for x in np.log10(x_labels)],fontsize = axissize)
+    elif var_x == 'T_obs':
+        ax1.set_xlabel(r'${\rm T_{obs}}$ $[yr]$',fontsize = labelsize)
+        ax1.set_xticklabels([r'$%i$' %int(x) for x in x_labels/u.yr.to('s')],fontsize = axissize)
 
     if var_y == 'M':
-        ax.set_ylabel(r'$M_{\rm tot}$ $[M_{\odot}]$',fontsize = labelsize)
-        ax.set_yticklabels([r'$10^{%i}$' %y if int(y) > 1 else r'$%i$' %(10**y) for y in np.log10(y_labels)],fontsize = axissize)
+        ax1.set_ylabel(r'$M_{\rm tot}$ $[M_{\odot}]$',fontsize = labelsize)
+        ax1.set_yticklabels([r'$10^{%i}$' %y if int(y) > 1 else r'$%i$' %(10**y) for y in np.log10(y_labels)],fontsize = axissize)
     elif var_y == 'q':
-        ax.set_ylabel(r'$q$',fontsize = labelsize)
-        ax.set_yticklabels(y_labels,fontsize = axissize)
+        ax1.set_ylabel(r'$q$',fontsize = labelsize)
+        ax1.set_yticklabels(y_labels,fontsize = axissize)
     elif var_y == 'z':
-        ax.set_ylabel(r'${\rm Redshift}$',fontsize = labelsize)
-        ax.set_yticklabels([y if int(y) < 1 else int(y) for y in y_labels],\
+        ax1.set_ylabel(r'${\rm Redshift}$',fontsize = labelsize)
+        ax1.set_yticklabels([y if int(y) < 1 else int(y) for y in y_labels],\
             fontsize = axissize)
     elif var_y == 'chi1' or var_x == 'chi2':
-        ax.set_ylabel(r'${\rm Spin}$',fontsize = labelsize)
-        ax.set_yticklabels(y_labels,fontsize = axissize)
+        ax1.set_ylabel(r'${\rm Spin}$',fontsize = labelsize)
+        ax1.set_yticklabels(y_labels,fontsize = axissize)
     elif var_y == 'L':
-        ax.set_ylabel(r'${\rm Armlength}$ $[m]$',fontsize = labelsize)
-        ax.set_yticklabels([r'$10^{%i}$' %y if int(y) > 1 else r'$%i$' %(10**y) for y in np.log10(y_labels)],fontsize = axissize)
+        ax1.set_ylabel(r'${\rm Armlength}$ $[m]$',fontsize = labelsize)
+        ax1.set_yticklabels([r'$10^{%i}$' %y if int(y) > 1 else r'$%i$' %(10**y) for y in np.log10(y_labels)],fontsize = axissize)
+    elif var_y == 'T_obs':
+        ax1.set_ylabel(r'${\rm T_{obs}}$ $[yr]$',fontsize = labelsize)
+        ax1.set_yticklabels([r'$%i$' %int(y) for y in y_labels/u.yr.to('s')],fontsize = axissize)
 
-    ax.yaxis.set_label_coords(-.10,.5)
+    ax1.yaxis.set_label_coords(-.10,.5)
 
     #If true, display luminosity distance on right side of plot
     if dl_axis:
-        dists = np.array([1e-1,1,10,1e2,1e3,1e4])*u.Gpc
-        #dists = np.array([1e-1,1,10,1e2])*u.Gpc 
+        dists_min = cosmo.luminosity_distance(source.var_dict['z']['min']).to('Gpc')
+        dists_min = np.ceil(np.log10(dists_min.value))
+        dists_max = cosmo.luminosity_distance(source.var_dict['z']['max']).to('Gpc')
+        dists_max = np.ceil(np.log10(dists_max.value))
+        dists = np.arange(dists_min,dists_max)
+        dists = 10**dists*u.Gpc
+
         distticks = [z_at_value(cosmo.luminosity_distance,dist) for dist in dists]
         #Set other side y-axis for lookback time scalings
-        ax2 = ax.twinx()
-        ax2.contour(np.log10(sample_x),np.log10(sample_y),logSNR,logLevels,colors = 'k',alpha=0.0)
         ax2.set_yticks(np.log10(distticks))
         #ax2.set_yticklabels(['%f' %dist for dist in distticks],fontsize = axissize)
         ax2.set_yticklabels([r'$10^{%i}$' %np.log10(dist) if np.abs(int(np.log10(dist))) > 1 else '{:g}'.format(dist) for dist in dists.value],fontsize = axissize)
         ax2.set_ylabel(r'$D_{L}$ [Gpc]',fontsize=labelsize)
-        cbar = fig.colorbar(CS1,ax=(ax,ax2),pad=0.01)
+        cbar = fig.colorbar(CS1,ax=(ax1,ax2),pad=0.01,ticks=print_logLevels)
     else:
         #########################
         #Make colorbar
-        cbar = fig.colorbar(CS1)
+        cbar = fig.colorbar(CS1,ticks=print_logLevels)
+        #Remove y-axis labels
+        ax2.tick_params(axis='y',right=False,labelright=False)
     cbar.set_label(r'$SNR$',fontsize = labelsize)
     cbar.ax.tick_params(labelsize = axissize)
-    cbar.ax.set_yticklabels([r'$10^{%i}$' %x if int(x) > 1 else r'$%i$' %(10**x) for x in logLevels])
+    cbar.ax.set_yticklabels([r'$10^{%i}$' %x if int(x) > 1 else r'$%i$' %(10**x) for x in print_logLevels])
 
     if display:
         plt.show()

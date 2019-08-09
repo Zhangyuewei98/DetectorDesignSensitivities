@@ -477,6 +477,25 @@ class SpaceBased:
         Get_Var_Dict(self,value)
 
     @property
+    def fT(self):
+        if not hasattr(self,'_fT'):
+            if hasattr(self,'_Tfunction_Type'):
+                if self._Tfunction_Type == 'numeric':
+                    self.Get_Numeric_Transfer_Function()
+                if self._Tfunction_Type == 'analytic':
+                    self.Get_Analytic_Transfer_Function()
+            else:
+                self.Set_Tfunction_Type()
+
+        return self._fT
+    @fT.setter
+    def fT(self,value):
+        self._fT = value
+    @fT.deleter
+    def fT(self):
+        del self._fT
+
+    @property
     def f_opt(self):
         #The optimal frequency of the instrument ie. the frequecy at the lowest strain
         self._f_opt = self.fT[np.argmin(self.h_n_f)]
@@ -570,7 +589,9 @@ class SpaceBased:
         idx_f_5 = np.abs(LISA_Transfer_Function_f-self.f_low).argmin()
         idx_f_1 = np.abs(LISA_Transfer_Function_f-self.f_high).argmin()
 
-        self.transferfunction = np.sqrt(3/20)*self._transferfunctiondata[idx_f_5:idx_f_1,1]
+        #3/10 is normalization 2/5sin(openingangle)
+        #Some papers use 3/20, not summing over 2 independent low-freq data channels
+        self.transferfunction = np.sqrt(3/10)*self._transferfunctiondata[idx_f_5:idx_f_1,1]
         self.fT = LISA_Transfer_Function_f[idx_f_5:idx_f_1]
 
     def Get_Analytic_Transfer_Function(self):
@@ -580,6 +601,7 @@ class SpaceBased:
         else:
             self.fT = np.logspace(np.log10(self.f_low),np.log10(self.f_high),self.nfreqs)*u.Hz
         f_L = const.c/2/np.pi/self.L #Transfer frequency
+        #3/10 is normalization 2/5sin(openingangle)
         R_f = 3/10/(1+0.6*(self.fT/f_L)**2) 
         self.transferfunction = np.sqrt(R_f)
 
@@ -934,6 +956,13 @@ class TimeDomain:
     @f.deleter
     def f(self):
         del self._f  
+
+    @property
+    def var_dict(self):
+        return self._var_dict
+    @var_dict.setter
+    def var_dict(self,value):
+        Get_Var_Dict(self,value)
     
     def Load_Data(self):
         diff_filename = self.name + '.dat'
