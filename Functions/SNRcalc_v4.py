@@ -294,9 +294,9 @@ def plotSNR(source,instrument,var_x,sample_x,var_y,sample_y,SNRMatrix,display=Tr
     #contLevels = np.array([1,10, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7,1e8,1e9])
     #contLevels = np.array([1,10, 1e2, 1e3, 1e4])
     logLevels = np.log10(contLevels)'''
-    axissize = 14
-    labelsize = 16
-    textsize = 11
+    axissize = 16
+    labelsize = 18
+    textsize = 12
     textcolor = 'k'
     linesize = 4
     figsize = (10,8)
@@ -411,14 +411,18 @@ def plotSNR(source,instrument,var_x,sample_x,var_y,sample_y,SNRMatrix,display=Tr
         ax1.set_xticklabels([r'$10^{%i}$' %x if int(x) > 1 else r'$%i$' %(10**x) for x in np.log10(x_labels)],fontsize = axissize)
     elif var_x == 'q':
         ax1.set_xlabel(r'$q$',fontsize = labelsize)
-        ax1.set_xticklabels(x_labels,fontsize = axissize)
+        ax1.set_xticklabels(x_labels,fontsize = axissize,rotation=45)
     elif var_x == 'z':
         ax1.set_xlabel(r'${\rm Redshift}$',fontsize = labelsize)
         ax1.set_xticklabels([x if int(x) < 1 else int(x) for x in x_labels],fontsize = axissize)
     elif var_x == 'chi1' or var_x == 'chi2':
+        x_labels = np.arange(round(xlabel_min*10),round(xlabel_max*10)+1,1)/10
+        ax1.set_xticks(x_labels)
         ax1.set_xlabel(r'${\rm Spin}$',fontsize = labelsize)
-        ax1.set_xticklabels(x_labels,fontsize = axissize)
+        ax1.set_xticklabels(x_labels,fontsize = axissize,rotation=45)
+        ax1.legend(loc='lower right')
     elif var_x == 'L':
+        ax1.axvline(x=np.log10(2.5*u.Gm.to('m')),linestyle='--',color='k',label='Proposed arm length')
         ax1.set_xlabel(r'${\rm Armlength}$ $[m]$',fontsize = labelsize)
         ax1.set_xticklabels([r'$10^{%i}$' %x if int(x) > 1 else r'$%i$' %(10**x) for x in np.log10(x_labels)],fontsize = axissize)
     elif var_x == 'T_obs':
@@ -430,17 +434,21 @@ def plotSNR(source,instrument,var_x,sample_x,var_y,sample_y,SNRMatrix,display=Tr
         ax1.set_yticklabels([r'$10^{%i}$' %y if int(y) > 1 else r'$%i$' %(10**y) for y in np.log10(y_labels)],fontsize = axissize)
     elif var_y == 'q':
         ax1.set_ylabel(r'$q$',fontsize = labelsize)
-        ax1.set_yticklabels(y_labels,fontsize = axissize)
+        ax1.set_yticklabels(y_labels,fontsize = axissize,rotation=45)
     elif var_y == 'z':
         ax1.set_ylabel(r'${\rm Redshift}$',fontsize = labelsize)
         ax1.set_yticklabels([y if int(y) < 1 else int(y) for y in y_labels],\
             fontsize = axissize)
-    elif var_y == 'chi1' or var_x == 'chi2':
+    elif var_y == 'chi1' or var_y == 'chi2':
+        y_labels = np.arange(round(ylabel_min*10),round(ylabel_max*10)+1,1)/10
+        ax1.set_yticks(y_labels)
         ax1.set_ylabel(r'${\rm Spin}$',fontsize = labelsize)
-        ax1.set_yticklabels(y_labels,fontsize = axissize)
+        ax1.set_yticklabels(y_labels,fontsize = axissize,rotation=45)
     elif var_y == 'L':
+        ax1.axhline(y=np.log10(2.5*u.Gm.to('m')),linestyle='--',color='k',label='Proposed arm length')
         ax1.set_ylabel(r'${\rm Armlength}$ $[m]$',fontsize = labelsize)
         ax1.set_yticklabels([r'$10^{%i}$' %y if int(y) > 1 else r'$%i$' %(10**y) for y in np.log10(y_labels)],fontsize = axissize)
+        ax1.legend(loc='lower right')
     elif var_y == 'T_obs':
         ax1.set_ylabel(r'${\rm T_{obs}}$ $[yr]$',fontsize = labelsize)
         ax1.set_yticklabels([r'$%i$' %int(y) for y in y_labels/u.yr.to('s')],fontsize = axissize)
