@@ -203,6 +203,10 @@ def Handle_Units(sample_x,var_x,sample_y,var_y):
 
 def calcMonoSNR(source,instrument):
     #SNR for a monochromatic source in a PTA
+    if isinstance(instrument,SnN.PTA):
+    	source.h_gw = 'Hazboun'
+    else:
+    	source.h_gw = 'Averaged'
     indxfgw = np.abs(instrument.fT-source.f_init).argmin()
 
     return source.h_gw/np.sqrt(instrument.S_n_f[indxfgw])
@@ -236,7 +240,7 @@ def calcChirpSNR(source,instrument):
         denom = S_n_f_interp #Sky Averaged Noise Spectral Density
         numer = h_cut**2
 
-        integral_consts = 4.
+        integral_consts = 4.*1.5
 
         integrand = numer/denom
         if isinstance(integrand,u.Quantity) and isinstance(f_cut,u.Quantity):
