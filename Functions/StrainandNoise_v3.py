@@ -1038,7 +1038,7 @@ def StrainConv(source,natural_f,natural_h):
     M_redshifted_time = source.M*(1+source.z)*m_conv
     
     freq_conv = 1/M_redshifted_time
-    #Normalized factor?
+    #Normalized factor to match Stationary phase approx at low frequencies?
     #Changed from sqrt(5/16/pi)
     strain_conv = np.sqrt(1/4/np.pi)*(const.c/DL)*M_redshifted_time**2
     

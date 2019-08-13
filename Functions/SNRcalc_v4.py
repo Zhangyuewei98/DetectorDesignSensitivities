@@ -45,7 +45,6 @@ def getSNRMatrix(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y):
     sampleSize_x = len(sample_x)
     sampleSize_y = len(sample_y)
     SNRMatrix = np.zeros((sampleSize_x,sampleSize_y))
-    tmpSNRMatrix=np.zeros((sampleSize_x,sampleSize_y))
     
     for i in range(sampleSize_x):
         for j in range(sampleSize_y):
@@ -236,30 +235,21 @@ def calcChirpSNR(source,instrument):
     S_n_f_interp = 10**S_n_f_interp_new
 
     if isinstance(instrument,SnN.PTA):
-        #CALCULATE SNR FOR BOTH NOISE CURVES
-        denom = S_n_f_interp #Sky Averaged Noise Spectral Density
-        numer = h_cut**2
-
+        #Rescaled by 1.5 to make SNR plots match...
         integral_consts = 4.*1.5
 
-        integrand = numer/denom
-        if isinstance(integrand,u.Quantity) and isinstance(f_cut,u.Quantity):
-            SNRsqrd = integral_consts*np.trapz(integrand.value,f_cut.value,axis=0) #SNR**2
-        else:
-            SNRsqrd = integral_consts*np.trapz(integrand,f_cut,axis=0) #SNR**2
-
     elif isinstance(instrument,SnN.SpaceBased) or isinstance(instrument,SnN.GroundBased):
-        #CALCULATE SNR FOR BOTH NOISE CURVES
-        denom = S_n_f_interp #Sky Averaged Noise Spectral Density
-        numer = h_cut**2
-
         integral_consts = 16./5.
 
-        integrand = numer/denom
-        if isinstance(integrand,u.Quantity) and isinstance(f_cut,u.Quantity):
-            SNRsqrd = integral_consts*np.trapz(integrand.value,f_cut.value,axis=0) #SNR**2
-        else:
-            SNRsqrd = integral_consts*np.trapz(integrand,f_cut,axis=0) #SNR**2
+
+    #CALCULATE SNR FOR BOTH NOISE CURVES
+    denom = S_n_f_interp #Sky Averaged Noise Spectral Density
+    numer = h_cut**2
+    integrand = numer/denom
+    if isinstance(integrand,u.Quantity) and isinstance(f_cut,u.Quantity):
+        SNRsqrd = integral_consts*np.trapz(integrand.value,f_cut.value,axis=0) #SNR**2
+    else:
+        SNRsqrd = integral_consts*np.trapz(integrand,f_cut,axis=0) #SNR**2
 
     return np.sqrt(SNRsqrd)
 
