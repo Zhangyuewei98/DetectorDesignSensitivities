@@ -76,6 +76,7 @@ def getSNRMatrix(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y):
                     del instrument.S_n_f
                 if hasattr(instrument,'h_n_f'):
                     del instrument.h_n_f
+                if isinstance(instrument,SnN.PTA) and hasattr(instrument,'_sensitivitycurve')
                 source.instrument = instrument
 
             source.checkFreqEvol()
