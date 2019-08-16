@@ -308,7 +308,8 @@ def plotSNR(source,instrument,var_x,sample_x,var_y,sample_y,SNRMatrix,display=Tr
     else:
         logLevels = print_logLevels
 
-
+    print(np.shape(print_logLevels))
+    print(np.shape(logLevels))
     if var_x in source.var_dict.keys():
         if isinstance(source.var_dict[var_x]['min'],u.Quantity):
             xlabel_min = source.var_dict[var_x]['min'].value
