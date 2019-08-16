@@ -71,6 +71,10 @@ Includes various classes that instantiate different GW detector sensitivities an
             * z - redshift of source
 * Various utility functions
 
+## `HorizonDistance.py`
+**Currently being worked on**
+* Calculates the Horizon Distance using similar methods to `SNRcalc.py`
+
 ## `SNRcalc.py`
 Includes various functions to calculate the SNR for any given GW detector sensitivity using different methods for particular sources.
 
