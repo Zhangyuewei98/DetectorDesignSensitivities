@@ -22,8 +22,7 @@ top_directory = "/".join(splt_path[0:top_path_idx+1])
 
 class PTA:
     '''
-    Class to make a PTA instrument using either the methods of 
-    Moore, Taylor, and Gair 2015 or Hazboun, Romano, Smith 2019
+    Class to make a PTA instrument using the methods of Hazboun, Romano, Smith 2019
     '''
     def __init__(self,name,*args,**kwargs):
         '''
@@ -37,8 +36,12 @@ class PTA:
         kwargs can be:
         load_location: If you want to load a PTA curve from a file, 
                         it's the file path
-        Background: Add in a stochastic gravitational wave background,
-                    only affects the Moore, Taylor, and Gair 2015 model
+        A_GWB: Amplitude of the gravitational wave background added as red noise
+        alpha_GWB: the GWB power law, if empty and A_GWB is set, it is assumed to be -2/3
+        A_rn: Individual pulsar red noise amplitude, is a list of [min,max] values from
+                which to uniformly sample
+        alpha_rn: Individual pulsar red noise alpha (power law), is a list of [min,max] values from
+                which to uniformly sample
         f_low: Assigned lowest frequency of PTA (default assigns 1/(5*T_obs))
         f_high: Assigned highest frequency of PTA (default is Nyquist freq cadence/2)
         nfreqs: Number of frequencies in logspace the sensitivity is calculated
@@ -47,8 +50,16 @@ class PTA:
         for keys,value in kwargs.items():
             if keys == 'load_location':
                 self.Load_Data(value)
-            elif keys == 'Background':
-                self.Background = value
+            elif keys == 'A_GWB':
+                self.A_GWB = value
+            elif keys == 'alpha_GWB':
+                self.alpha_GWB = value
+            elif keys == 'A_rn':
+                self.A_rn_min = value[0]
+                self.A_rn_max = value[1]
+            elif keys == 'alpha_rn':
+                self.alpha_rn_min = value[0]
+                self.alpha_rn_max = value[1]
             elif keys == 'f_low':
                 self.f_low = value
             elif keys == 'f_high':
@@ -58,8 +69,6 @@ class PTA:
 
         if not hasattr(self,'nfreqs'):
             self.nfreqs = int(1e3)
-        if not hasattr(self,'Background'): 
-            self.Background = False
         if hasattr(self,'f_low') and hasattr(self,'f_high'):
             self.fT = np.logspace(self.f_low,self.f_high,self.nfreqs)
 
@@ -145,7 +154,7 @@ class PTA:
         #Effective noise power amplitude
         if not hasattr(self,'_S_n_f'):
             if not hasattr(self,'_sensitivitycurve'):
-            self.Init_PTA()
+                self.Init_PTA()
             self._S_n_f = self._sensitivitycurve.S_eff/u.Hz
         return self._S_n_f
     @S_n_f.setter
@@ -172,11 +181,31 @@ class PTA:
 
         #Random Sky Locations of Pulsars
         phi = np.random.uniform(0, 2*np.pi,size=self.N_p)
-        theta = np.random.uniform(0, np.pi,size=self.N_p)
+        cos_theta = np.random.uniform(-1,1,size=self.N_p)
+        theta = np.arccos(cos_theta)
 
-        #Make a set of psrs with the same parameters
-        psrs = hassim.sim_pta(timespan=self.T_obs.value,cad=self.cadence.value,sigma=self.sigma.value,
-            phi=phi, theta=theta, Npsrs=self.N_p)
+        if hasattr(self,'A_GWB'):
+            if not hasattr(self,'alpha_GWB'):
+                self.alpha_GWB = -2/3.
+            #Make a set of psrs with the same parameters with a GWB as red noise
+            psrs = hassim.sim_pta(timespan=self.T_obs.value,cad=self.cadence.value,sigma=self.sigma.value,
+            phi=phi, theta=theta, Npsrs=self.N_p,A_rn=self.A_GWB,alpha=self.alpha_GWB,freqs=self.fT.value)
+        elif hasattr(self,'A_rn_min') or hasattr(self,'alpha_rn_min'):
+            if not hasattr(self,'A_rn_min'):
+                A_rn = np.random.uniform(1e-16,1e-12,size=self.N_p)
+            else:
+                A_rn = np.random.uniform(self.A_rn_min,self.A_rn_max,size=self.N_p)
+            if not hasattr(self,'alpha_rn_min'):
+                alphas = np.random.uniform(-3/4,1,size=self.N_p)
+            else:
+                alphas = np.random.uniform(self.alpha_rn_min,self.alpha_rn_max,size=self.N_p)            
+            #Make a set of psrs with uniformly sampled red noise
+            psrs = hassim.sim_pta(timespan=self.T_obs.value,cad=self.cadence.value,sigma=self.sigma.value,
+            phi=phi, theta=theta, Npsrs=self.N_p,A_rn=A_rn,alpha=alphas,freqs=self.fT.value)
+        else:
+            #Make a set of psrs with the same parameters
+            psrs = hassim.sim_pta(timespan=self.T_obs.value,cad=self.cadence.value,sigma=self.sigma.value,
+                phi=phi, theta=theta, Npsrs=self.N_p,freqs=self.fT.value)
         #Get Spectra of pulsars
         spectra= []
         for p in psrs:
@@ -278,7 +307,7 @@ class SpaceBased:
         self.name = name
         for keys,value in kwargs.items():
             if keys == 'load_location':
-                self.Load_Data(value)
+                self.load_location = value
             elif keys == 'Background':
                 self.Background = value
             elif keys == 'f_low':
@@ -287,6 +316,10 @@ class SpaceBased:
                 self.f_high = value
             elif keys == 'nfreqs':
                 self.nfreqs = value
+            elif keys == 'Tfunction_Type':
+                self.Set_Tfunction_Type(value)
+            elif keys == 'I_type':
+                self.I_type = value
 
         if not hasattr(self,'nfreqs'):
             self.nfreqs = int(1e3)
@@ -296,6 +329,8 @@ class SpaceBased:
             self.f_high = 1.0*u.Hz
         if not hasattr(self,'Background'): 
             self.Background = False
+        if hasattr(self,'load_location'):
+            self.Load_Data()
 
         if len(args) != 0:
             [T_obs,L,A_acc,f_acc_break_low,f_acc_break_high,A_IFO,f_IMS_break] = args
@@ -306,7 +341,9 @@ class SpaceBased:
             self.f_acc_break_high = f_acc_break_high
             self.A_IFO = A_IFO
             self.f_IMS_break = f_IMS_break
-            self.Set_Tfunction_Type()
+
+        if not hasattr(self,'_Tfunction_Type') and not hasattr(self,'load_location'):
+            self.Set_Tfunction_Type('N')
 
     @property
     def T_obs(self):
@@ -449,22 +486,29 @@ class SpaceBased:
     def h_n_f(self):
         del self._h_n_f
 
-    def Load_Data(self,load_location):
-        print('Is the data:')
-        print(' *Effective Noise Spectral Density - "E"')
-        print(' *Amplitude Spectral Density- "A"')
-        print(' *Effective Strain - "h"')
-        I_type = input('Please enter one of the answers in quotations: ')
-        if I_type == 'E' or I_type == 'e':
+    def Load_Data(self):
+        if not hasattr(self,'I_type'):
+            print('Is the data:')
+            print(' *Effective Noise Spectral Density - "E"')
+            print(' *Amplitude Spectral Density- "A"')
+            print(' *Effective Strain - "h"')
+            self.I_type = input('Please enter one of the answers in quotations: ')
+            self.Load_Data()
+
+        if self.I_type == 'E' or self.I_type == 'e':
             self._I_Type = 'ENSD'
-        elif I_type == 'A' or I_type == 'a':
+        elif self.I_type == 'A' or self.I_type == 'a':
             self._I_Type = 'ASD'
-        elif I_type == 'h' or I_type == 'H':
+        elif self.I_type == 'h' or self.I_type == 'H':
             self._I_Type = 'h'
         else:
-            print('Please choose either "E","A", "h", or convert to one of these.\n')
-            self.Load_Data(load_location)
-        self._I_data = np.loadtxt(load_location)
+            print('Is the data:')
+            print(' *Effective Noise Spectral Density - "E"')
+            print(' *Amplitude Spectral Density- "A"')
+            print(' *Effective Strain - "h"')
+            self.I_type = input('Please enter one of the answers in quotations: ')
+            self.Load_Data()
+        self._I_data = np.loadtxt(self.load_location)
         self.fT = self._I_data[:,0]*u.Hz
 
     def Load_TransferFunction(self):
@@ -500,18 +544,17 @@ class SpaceBased:
         R_f = 3/10/(1+0.6*(self.fT/f_L)**2) 
         self.transferfunction = np.sqrt(R_f)
 
-    def Set_Tfunction_Type(self):
-        print('\nYou can get the transfer function via 2 methods:')
-        print(' *To use the numerically approximated method in Robson, Cornish, and Liu, 2019, input "N".')
-        print(' *To use the analytic fit in Larson, Hiscock, and Hellings, 2000, input "A".')
-        calc_type = input('Please select the calculation type: ')
+    def Set_Tfunction_Type(self,calc_type):
         if calc_type == 'n' or calc_type == 'N':
             self._Tfunction_Type = 'numeric'
         elif calc_type == 'a' or calc_type == 'A':
             self._Tfunction_Type = 'analytic'
         else:
-            print('Please choose either analytic: "A" or numeric: "N".\n')
-            self.Set_Tfunction_Type()
+            print('\nYou can get the transfer function via 2 methods:')
+            print(' *To use the numerically approximated method in Robson, Cornish, and Liu, 2019, input "N".')
+            print(' *To use the analytic fit in Larson, Hiscock, and Hellings, 2000, input "A".')
+            calc_type = input('Please select the calculation type: ')
+            self.Set_Tfunction_Type(calc_type)
         if hasattr(self,'_Tfunction_Type'):
             if self._Tfunction_Type == 'numeric':
                 self.Get_Numeric_Transfer_Function()

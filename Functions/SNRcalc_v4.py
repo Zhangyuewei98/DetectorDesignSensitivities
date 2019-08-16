@@ -18,7 +18,7 @@ from astropy.cosmology import WMAP9 as cosmo
 
 from fractions import Fraction
 
-import StrainandNoise_v3 as SnN
+import StrainandNoise_v4 as SnN
 
 current_path = os.getcwd()
 splt_path = current_path.split("/")
@@ -76,7 +76,8 @@ def getSNRMatrix(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y):
                     del instrument.S_n_f
                 if hasattr(instrument,'h_n_f'):
                     del instrument.h_n_f
-                if isinstance(instrument,SnN.PTA) and hasattr(instrument,'_sensitivitycurve')
+                if isinstance(instrument,SnN.PTA) and hasattr(instrument,'_sensitivitycurve'):
+                    del instrument._sensitivitycurve
                 source.instrument = instrument
 
             source.checkFreqEvol()
