@@ -46,7 +46,7 @@ class PTA:
         f_high: Assigned highest frequency of PTA (default is Nyquist freq cadence/2)
         nfreqs: Number of frequencies in logspace the sensitivity is calculated
         '''
-        self.name = name
+        self.name = var_name
         for keys,value in kwargs.items():
             if keys == 'load_location':
                 self.Load_Data(value)
@@ -290,19 +290,23 @@ class SpaceBased:
         '''
         name - name of the instrument
         args in order: 
-        T_obs - the observation time of the PTA in [years]
-        L - the armlength the of detector in [meters]
-        A_acc - the Amplitude of the Acceleration Noise in [meters/second^2]
-        f_acc_break_low = the lower break frequency of the acceleration noise in [Hz]
-        f_acc_break_high = the higher break frequency of the acceleration noise in [Hz]
-        A_IFO = the amplitude of the interferometer 
+            T_obs - the observation time of the PTA in [years]
+            L - the armlength the of detector in [meters]
+            A_acc - the Amplitude of the Acceleration Noise in [meters/second^2]
+            f_acc_break_low - the lower break frequency of the acceleration noise in [Hz]
+            f_acc_break_high - the higher break frequency of the acceleration noise in [Hz]
+            A_IFO = the amplitude of the interferometer 
         kwargs can be:
-        load_location: If you want to load a PTA curve from a file, 
-                        it's the file path
-        Background: Add in a Galactic Binary Confusion Noise
-        f_low: Assigned lowest frequency of instrument (default assigns 10^-5Hz)
-        f_high: Assigned highest frequency of instrument (default is 1Hz)
-        nfreqs: Number of frequencies in logspace the sensitivity is calculated (default is 1e3)
+            load_location - If you want to load a PTA curve from a file, 
+                            it's the file path
+            Background - Add in a Galactic Binary Confusion Noise
+            f_low - Assigned lowest frequency of instrument (default assigns 10^-5Hz)
+            f_high - Assigned highest frequency of instrument (default is 1Hz)
+            nfreqs - Number of frequencies in logspace the sensitivity is calculated (default is 1e3)
+            Tfunction_Type - The transfer function method. Can be either 'N', or 'A'. 
+                To use the numerically approximated method in Robson, Cornish, and Liu, 2019, input "N".
+                To use the analytic fit in Larson, Hiscock, and Hellings, 2000, input "A".
+            I_type - Used in selecting the type of curve given in the load location file
         '''
         self.name = name
         for keys,value in kwargs.items():
@@ -591,22 +595,30 @@ class SpaceBased:
 
 class BlackHoleBinary:
     def __init__(self,*args,**kwargs):
-        '''args order: M,q,chi1,chi2,z,inc
-            kwargs: instrument=None,f_low=1e-5,nfreqs=int(1e3)'''
+        '''
+        args in order: 
+            M - Total mass of binary in solar masses
+            q - mass ratio, assumed to be m2/m1 > 1
+            chi1 - spin of m1
+            chi2 - spin of m2
+            z - redshift of source
+            inc - source inclination (isn't implemented yet, assumed to be averaged)
+        kwargs can be: 
+            f_low - low frequency of signal, assumed to be 1e-5 in geometrized units (Mf)
+            nfreqs - number of frequencies at which the waveform is calculated, assumed to be int(1e3)
+        '''
 
         [M,q,chi1,chi2,z,inc] = args
         self.M = M
         self.q = q
-        self.z = z
         self.chi1 = chi1
         self.chi2 = chi2
+        self.z = z
         self.inc = inc
 
         for keys,value in kwargs.items():
             if keys == 'f_low':
                 self.f_low = value
-            elif keys == 'f_high':
-                self.f_high = value
             elif keys == 'nfreqs':
                 self.nfreqs = value
             elif keys == 'instrument':
@@ -615,7 +627,7 @@ class BlackHoleBinary:
         if not hasattr(self,'nfreqs'):
             self.nfreqs = int(1e3)
         if not hasattr(self,'f_low'):
-            self.f_low = 1e-5*u.Hz
+            self.f_low = 1e-5
 
         self.Get_fitcoeffs()
 
@@ -777,7 +789,7 @@ class BlackHoleBinary:
 
         Vars = [self.M,self.q,self.chi1,self.chi2,self.z]
 
-        [self._phenomD_f,self._phenomD_h] = PhenomD.FunPhenomD(Vars,self._fitcoeffs,self.nfreqs,f_low=self.f_low.value)
+        [self._phenomD_f,self._phenomD_h] = PhenomD.FunPhenomD(Vars,self._fitcoeffs,self.nfreqs,f_low=self.f_low)
 
     def checkFreqEvol(self):
         #####################################
@@ -819,7 +831,13 @@ class BlackHoleBinary:
 
 class TimeDomain:
     def __init__(self,name,*args):
-        '''args order: M,q,z'''
+        '''
+        Class for EOB diff waveform calculation, feasibly could take in any time domain waveform
+        args in order: 
+            M - Total mass of binary in solar masses
+            q - mass ratio, assumed to be m2/m1 > 1
+            z - redshift of source
+        '''
         self.name = name
 
         if len(args) != 0:
@@ -985,6 +1003,9 @@ def StrainConv(source,natural_f,natural_h):
     return [f,h_f]
 
 def Get_CharStrain(source):
+    '''
+    Converts raw source strain to characteristic strain
+    '''
     if hasattr(source,'f') and hasattr(source,'h_f'):
         h_char = np.sqrt(4*source.f**2*source.h_f**2)
         return h_char
@@ -993,6 +1014,9 @@ def Get_CharStrain(source):
 
 
 def Get_Var_Dict(obj,value):
+    '''
+    Utility function to instatiate and update source/instrument variable dictionary
+    '''
     if not hasattr(obj,'var_dict'):
             obj._var_dict = {}
     if isinstance(value,list):
