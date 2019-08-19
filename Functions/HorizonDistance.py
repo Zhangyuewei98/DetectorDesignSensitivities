@@ -36,51 +36,57 @@ def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh,redshift_
     [sample_x,recalculate_strain,recalculate_noise] = Get_Samples(source,instrument,var_x,sampleRate_x)
 
     sampleSize_x = len(sample_x)
-    if redshift_array == None:
+    if not isinstance(redshift_array,np.ndarray):
         redshift_array = np.ones(sampleSize_x)*source.z
     DL_array = np.zeros(sampleSize_x)
     
     for i in range(sampleSize_x):
 
-            if recalculate_noise == True:
-                #Update Attribute (also updates dictionary)
-                setattr(instrument,var_x,sample_x[i])
-                #Recalculate noise curves if something is varied
-                if hasattr(instrument,'fT'):
-                    del instrument.fT
-                if hasattr(instrument,'P_n_f'):
-                    del instrument.P_n_f
-                if hasattr(instrument,'S_n_f'):
-                    del instrument.S_n_f
-                if hasattr(instrument,'h_n_f'):
-                    del instrument.h_n_f
-                source.instrument = instrument
-            elif recalculate_noise == False:
-                #Update Attribute (also updates dictionary)
-                setattr(source,var_x,sample_x[i])
+        if recalculate_noise == True:
+            #Update Attribute (also updates dictionary)
+            setattr(instrument,var_x,sample_x[i])
+            #Recalculate noise curves if something is varied
+            if hasattr(instrument,'fT'):
+                del instrument.fT
+            if hasattr(instrument,'P_n_f'):
+                del instrument.P_n_f
+            if hasattr(instrument,'S_n_f'):
+                del instrument.S_n_f
+            if hasattr(instrument,'h_n_f'):
+                del instrument.h_n_f
+            source.instrument = instrument
+        elif recalculate_noise == False:
+            #Update Attribute (also updates dictionary)
+            setattr(source,var_x,sample_x[i])
 
-            #Update particular source's redshift
-            setattr(source,'z',redshift_array[i])
+        #Update particular source's redshift
+        setattr(source,'z',redshift_array[i])
 
-            source.checkFreqEvol()
-            #print(source.ismono)
-            if source.ismono: #Monochromatic Source and not diff EOB SNR
-                DL_array[i] = calcMonoHD(source,instrument,rho_thresh)
-            else: #Chirping Source
-                if recalculate_strain == True: #If we need to calculate the waveform everytime
-                    #Delete old PhenomD waveform
-                    if hasattr(source,'_phenomD_f'):
-                        del source._phenomD_f
-                    if hasattr(source,'_phenomD_h'):
-                        del source._phenomD_h
-                if hasattr(source,'f'):
-                    del source.f
-                DL_array[i] = calcChirpHD(source,instrument,rho_thresh)
+        source.checkFreqEvol()
+        #print(source.ismono)
+        if source.ismono: #Monochromatic Source and not diff EOB SNR
+            DL_array[i] = calcMonoHD(source,instrument,rho_thresh)
+        else: #Chirping Source
+            if recalculate_strain == True: #If we need to calculate the waveform everytime
+                #Delete old PhenomD waveform
+                if hasattr(source,'_phenomD_f'):
+                    del source._phenomD_f
+                if hasattr(source,'_phenomD_h'):
+                    del source._phenomD_h
+            if hasattr(source,'f'):
+                del source.f
+            DL_array[i] = calcChirpHD(source,instrument,rho_thresh)
 
-            DL_array *= u.m.to('Mpc')
-            print(DL_array)
+    DL_array = DL_array*u.m.to('Mpc')*u.Mpc
 
-    return [sample_x,DL_array,z_at_value(cosmo.luminosity_distance,DL_array)]
+    new_redshift_array = np.zeros(np.shape(DL_array))
+    for i,DL in enumerate(DL_array):
+        if np.log10(DL.value) < -3:
+            new_redshift_array[i] = -5
+        else:
+            new_redshift_array[i] = z_at_value(cosmo.luminosity_distance,DL)
+
+    return [sample_x,DL_array,new_redshift_array]
 
 def Get_Samples(source,instrument,var_x,sampleRate_x):
     ''' Takes in a object (either for the instrument or source), and the variables
@@ -140,10 +146,10 @@ def Get_Samples(source,instrument,var_x,sampleRate_x):
 def calcMonoHD(source,instrument,rho_thresh):
     ''' Calculates the Horizon Distance for a monochromatic source at an SNR of rho_thresh'''
 
-    m_conv = const.G*const.M_sun/const.c**3 #Converts M = [M] to M = [sec]
+    m_conv = const.G/const.c**3 #Converts M = [M] to M = [sec]
 
     eta = source.q/(1+source.q)**2
-    M_time = source.M*m_conv
+    M_time = source.M.to('kg')*m_conv
     M_chirp = eta**(3/5)*M_time
     #Source is emitting at one frequency (monochromatic)
     #strain of instrument at f_cw
@@ -171,15 +177,16 @@ def calcChirpHD(source,instrument,rho_thresh):
                 Uses a constant SNR of rho_thresh
     '''
 
-    m_conv = const.G*const.M_sun/const.c**3 #Converts M = [M] to M = [sec]
-    M_time = source.M*m_conv
+    m_conv = const.G/const.c**3 #Converts M = [M] to M = [sec]
+    M_time = source.M.to('kg')*m_conv
 
     #Only want to integrate from observed frequency (f(T_obs_before_merger)) till merger
     source.f = source._phenomD_f/M_time
     indxfgw = np.abs(source.f-source.f_T_obs).argmin()
     if indxfgw >= len(source.f)-1:
         #If the SMBH has already merged set the SNR to ~0
-        return 1e-60  
+        print('TOO LOW')
+        return 1e-30  
     else:
         f_cut = source.f[indxfgw:]
         nat_h_cut = source._phenomD_h[indxfgw:]

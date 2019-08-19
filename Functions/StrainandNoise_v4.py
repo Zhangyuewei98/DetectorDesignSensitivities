@@ -724,10 +724,10 @@ class BlackHoleBinary:
             DL = cosmo.luminosity_distance(self.z)
             DL = DL.to('m')
 
-            m_conv = const.G*const.M_sun/const.c**3 #Converts M = [M] to M = [sec]
+            m_conv = const.G/const.c**3 #Converts M = [M] to M = [sec]
 
             eta = self.q/(1+self.q)**2
-            M_redshifted_time = self.M*(1+self.z)*m_conv
+            M_redshifted_time = self.M.to('kg')*(1+self.z)*m_conv
             M_chirp = eta**(3/5)*M_redshifted_time
             #Source is emitting at one frequency (monochromatic)
             #strain of instrument at f_cw
@@ -773,6 +773,7 @@ class BlackHoleBinary:
             if not (hasattr(self,'_phenomD_f') and hasattr(self,'_phenomD_h')):
                 self.Get_PhenomD_Strain()
             [self._f,self.h] = StrainConv(self,self._phenomD_f,self._phenomD_h)
+        self._f = make_quant(self._f,'Hz')
         return self._f
     @f.setter
     def f(self,value):
@@ -818,10 +819,10 @@ class BlackHoleBinary:
         #set the starting frequency we observe it at to f(Tobs), which is the 
         #frequency at an observation time before merger
         #####################################
-        m_conv = const.G*const.M_sun/const.c**3 #Converts M = [M] to M = [sec]
+        m_conv = const.G/const.c**3 #Converts M = [M] to M = [sec]
         
         eta = self.q/(1+self.q)**2
-        M_redshifted_time = self.M*(1+self.z)*m_conv
+        M_redshifted_time = self.M.to('kg')*(1+self.z)*m_conv
         M_chirp = eta**(3/5)*M_redshifted_time
 
         #from eqn 41 from Hazboun,Romano, and Smith (2019) https://arxiv.org/abs/1907.04341
@@ -997,8 +998,8 @@ def StrainConv(source,natural_f,natural_h):
     DL = cosmo.luminosity_distance(source.z)
     DL = DL.to('m')
 
-    m_conv = const.G*const.M_sun/const.c**3 #Converts M = [M] to M = [sec]
-    M_redshifted_time = source.M*(1+source.z)*m_conv
+    m_conv = const.G/const.c**3 #Converts M = [M] to M = [sec]
+    M_redshifted_time = source.M.to('kg')*(1+source.z)*m_conv
     
     freq_conv = 1/M_redshifted_time
     #Normalized factor to match Stationary phase approx at low frequencies?
