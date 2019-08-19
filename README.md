@@ -43,7 +43,7 @@ Includes various classes that instantiate different GW detector sensitivities an
 			* Tfunction_Type - The transfer function method. Can be either 'N', or 'A'. 
 				To use the numerically approximated method in Robson, Cornish, and Liu, 2019, input "N".
 				To use the analytic fit in Larson, Hiscock, and Hellings, 2000, input "A".
-           		* I_type - Used in selecting the type of curve given in the load location file
+			* I_type - Used in selecting the type of curve given in the load location file
 	* Ground Based Detectors (eg. LIGO,ET)
 		* Can only be loaded in via file, currently...
 		* name - the name of the instrument
@@ -52,23 +52,23 @@ Includes various classes that instantiate different GW detector sensitivities an
                         it's the file path
 * Black Hole Binary (BHB) Source Strains:
 	* args in order: 
-            * M - Total mass of binary in solar masses
-            * q - mass ratio, assumed to be m2/m1 > 1
-            * chi1 - spin of m1
-            * chi2 - spin of m2
-            * z - redshift of source
-            * inc - source inclination (isn't implemented yet, assumed to be averaged)
-        * kwargs can be: 
-            * f_low - low frequency of signal, assumed to be 1e-5 in geometrized units (Mf)
-            * nfreqs - number of frequencies at which the waveform is calculated, assumed to be int(1e3)
+		* M - Total mass of binary in solar masses
+		* q - mass ratio, assumed to be m2/m1 > 1
+		* chi1 - spin of m1
+		* chi2 - spin of m2
+		* z - redshift of source
+		* inc - source inclination (isn't implemented yet, assumed to be averaged)
+	* kwargs can be: 
+		* f_low - low frequency of signal, assumed to be 1e-5 in geometrized units (Mf)
+		* nfreqs - number of frequencies at which the waveform is calculated, assumed to be int(1e3)
 	* Deals with both cases in one place!
 		* Frequency evolving "chirping" sources
 		* Monochromatic, non-evolving sources
 * Time Domain Strains that can be converted to frequency space for use in SNR calculations
 	* args in order: 
-            * M - Total mass of binary in solar masses
-            * q - mass ratio, assumed to be m2/m1 > 1
-            * z - redshift of source
+		* M - Total mass of binary in solar masses
+		* q - mass ratio, assumed to be m2/m1 > 1
+		* z - redshift of source
 * Various utility functions
 
 ## `HorizonDistance.py`
@@ -85,7 +85,7 @@ Includes various functions to calculate the SNR for any given GW detector sensit
 * __`calcChirpSNR`__
 	* Calculates evolving source using non-precessing binary black hole waveform model in `IMRPhenomD.py`, see Husa et al. 2016 (https://arxiv.org/abs/1508.07250) and Khan et al. 2016 (https://arxiv.org/abs/1508.07253). Uses an interpolated method to align waveform and instrument noise, then integrates over the overlapping region. See eqn 18 from Robson,Cornish,and Liu 2018 (https://arxiv.org/abs/1803.01944).
 * __`calcDiffSNR`__:
-    * Calculates the SNR loss from the difference in EOB waveforms and numerical relativity. The strain is from Sean McWilliams in a private communication. Uses an interpolated method to align waveform and instrument noise, then integrates over the overlapping region.
+	* Calculates the SNR loss from the difference in EOB waveforms and numerical relativity. The strain is from Sean McWilliams in a private communication. Uses an interpolated method to align waveform and instrument noise, then integrates over the overlapping region.
 * __`plotSNR`__
 	* Generates the waterfall plot for the variables given to calcSNR 
 ## `IMRPhenomD.py`
