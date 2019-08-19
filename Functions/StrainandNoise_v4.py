@@ -81,6 +81,7 @@ class PTA:
 
     @property
     def T_obs(self):
+        self._T_obs = make_quant(self._T_obs,'yr')
         return self._T_obs
     @T_obs.setter
     def T_obs(self,value):
@@ -97,6 +98,7 @@ class PTA:
 
     @property
     def cadence(self):
+        self._cadence = make_quant(self._cadence,'1/yr')
         return self._cadence
     @cadence.setter
     def cadence(self,value):
@@ -105,6 +107,7 @@ class PTA:
 
     @property
     def sigma(self):
+        self._sigma = make_quant(self._sigma,'s')
         return self._sigma
     @sigma.setter
     def sigma(self,value):
@@ -125,7 +128,8 @@ class PTA:
             #5 is the default value for now (from Hazboun et al. 2019)
             T_obs_sec = self.T_obs.to('s').value
             cadence_sec = self.cadence.to('1/s').value
-            self._fT = np.logspace(np.log10(1/(5*T_obs_sec)),np.log10(cadence_sec/2),self.nfreqs)*u.Hz
+            self._fT = np.logspace(np.log10(1/(5*T_obs_sec)),np.log10(cadence_sec/2),self.nfreqs)
+        self._fT = make_quant(self._fT,'Hz')
         return self._fT
     @fT.setter
     def fT(self,value):
@@ -155,7 +159,8 @@ class PTA:
         if not hasattr(self,'_S_n_f'):
             if not hasattr(self,'_sensitivitycurve'):
                 self.Init_PTA()
-            self._S_n_f = self._sensitivitycurve.S_eff/u.Hz
+            self._S_n_f = self._sensitivitycurve.S_eff
+        self._S_n_f = make_quant(self._S_n_f,'1/Hz')
         return self._S_n_f
     @S_n_f.setter
     def S_n_f(self,value):
@@ -173,7 +178,7 @@ class PTA:
 
     def Load_Data(self,load_location):
         self._I_data = np.loadtxt(load_location)
-        self.fT = self._I_data[:,0]*u.Hz
+        self.fT = self._I_data[:,0]
         self.h_n_f = self._I_data[:,1]
 
     def Init_PTA(self):
@@ -235,6 +240,7 @@ class GroundBased:
 
     @property
     def T_obs(self):
+        self._T_obs = make_quant(self._T_obs,'yr')
         return self._T_obs
     @T_obs.setter
     def T_obs(self,value):
@@ -251,8 +257,10 @@ class GroundBased:
     @property
     def S_n_f(self):
         #Effective Noise Power Specral Density
-        S_n_f_sqrt = self._I_data[:,1]
-        self._S_n_f = S_n_f_sqrt**2/(u.Hz)
+        if not hasattr(self,'_S_n_f'):
+            S_n_f_sqrt = self._I_data[:,1]
+            self._S_n_f = S_n_f_sqrt**2
+        self._S_n_f = make_quant(self._S_n_f,'1/Hz')
         return self._S_n_f
     @S_n_f.deleter
     def S_n_f(self):
@@ -260,7 +268,9 @@ class GroundBased:
 
     @property
     def fT(self):
-        self._fT = self._I_data[:,0]*u.Hz
+        if not hasattr(self,'_fT'):
+            self._fT = self._I_data[:,0]*u.Hz
+        self._fT = make_quant(self._fT,'Hz')
         return self._fT
     @fT.deleter
     def fT(self):
@@ -347,6 +357,7 @@ class SpaceBased:
 
     @property
     def T_obs(self):
+        self._T_obs = make_quant(self._T_obs,'yr')
         return self._T_obs
     @T_obs.setter
     def T_obs(self,value):
@@ -355,6 +366,7 @@ class SpaceBased:
 
     @property
     def L(self):
+        self._L = make_quant(self._L,'m')
         return self._L
     @L.setter
     def L(self,value):
@@ -363,6 +375,7 @@ class SpaceBased:
 
     @property
     def A_acc(self):
+        self._A_acc = make_quant(self._A_acc,'m/(s*s)')
         return self._A_acc
     @A_acc.setter
     def A_acc(self,value):
@@ -371,6 +384,7 @@ class SpaceBased:
 
     @property
     def f_acc_break_low(self):
+        self._f_acc_break_low = make_quant(self._f_acc_break_low,'Hz')
         return self._f_acc_break_low
     @f_acc_break_low.setter
     def f_acc_break_low(self,value):
@@ -379,6 +393,7 @@ class SpaceBased:
 
     @property
     def f_acc_break_high(self):
+        self._f_acc_break_high = make_quant(self._f_acc_break_high,'Hz')
         return self._f_acc_break_high
     @f_acc_break_high.setter
     def f_acc_break_high(self,value):
@@ -387,6 +402,7 @@ class SpaceBased:
 
     @property
     def A_IFO(self):
+        self._A_IFO = make_quant(self._A_IFO,'m')
         return self._A_IFO
     @A_IFO.setter
     def A_IFO(self,value):
@@ -395,6 +411,7 @@ class SpaceBased:
 
     @property
     def f_IMS_break(self):
+        self._f_IMS_break = make_quant(self._f_IMS_break,'Hz')
         return self._f_IMS_break
     @f_IMS_break.setter
     def f_IMS_break(self,value):
@@ -419,6 +436,7 @@ class SpaceBased:
             else:
                 self.Set_Tfunction_Type()
 
+        self._fT = make_quant(self._fT,'Hz')
         return self._fT
     @fT.setter
     def fT(self,value):
@@ -457,9 +475,11 @@ class SpaceBased:
             if hasattr(self,'_I_data'):
                 if self._I_Type == 'ASD':
                     S_n_f_sqrt = self._I_data[:,1]
-                    self._S_n_f = S_n_f_sqrt**2/(u.Hz)
+                    self._S_n_f = S_n_f_sqrt**2
+                    self._S_n_f = make_quant(self._S_n_f,'1/Hz')
                 elif self._I_Type == 'ENSD':
-                    self._S_n_f = self._I_data[:,1]/u.Hz
+                    self._S_n_f = self._I_data[:,1]
+                    self._S_n_f = make_quant(self._S_n_f,'1/Hz')
                 elif self._I_Type == 'h':
                     self._S_n_f = self.h_n_f**2/self.fT
             else:
@@ -478,7 +498,7 @@ class SpaceBased:
         #Characteristic Strain/effective strain noise amplitude
         if not hasattr(self,'_h_n_f'):
             if hasattr(self,'_I_data') and self._I_Type == 'h':
-                    self._h_n_f = self._I_data[:,1]
+                self._h_n_f = self._I_data[:,1]
             else:
                 self._h_n_f = np.sqrt(self.fT*self.S_n_f)
         return self._h_n_f
@@ -509,7 +529,7 @@ class SpaceBased:
             self.I_type = input('Please enter one of the answers in quotations: ')
             self.Load_Data()
         self._I_data = np.loadtxt(self.load_location)
-        self.fT = self._I_data[:,0]*u.Hz
+        self.fT = self._I_data[:,0]
 
     def Load_TransferFunction(self):
         LISA_Transfer_Function_filedirectory = top_directory + '/LoadFiles/LISATransferFunction/'
@@ -536,9 +556,9 @@ class SpaceBased:
     def Get_Analytic_Transfer_Function(self):
         #Response function approximation from Calculation described by Cornish, Robson, Liu 2019
         if isinstance(self.f_low,u.Quantity) and isinstance(self.f_low,u.Quantity):
-            self.fT = np.logspace(np.log10(self.f_low.value),np.log10(self.f_high.value),self.nfreqs)*u.Hz
+            self.fT = np.logspace(np.log10(self.f_low.value),np.log10(self.f_high.value),self.nfreqs)
         else:
-            self.fT = np.logspace(np.log10(self.f_low),np.log10(self.f_high),self.nfreqs)*u.Hz
+            self.fT = np.logspace(np.log10(self.f_low),np.log10(self.f_high),self.nfreqs)
         f_L = const.c/2/np.pi/self.L #Transfer frequency
         #3/10 is normalization 2/5sin(openingangle)
         R_f = 3/10/(1+0.6*(self.fT/f_L)**2) 
@@ -621,6 +641,7 @@ class BlackHoleBinary:
 
     @property
     def M(self):
+        self._M = make_quant(self._M,'M_sun')
         return self._M
     @M.setter
     def M(self,value):
@@ -678,6 +699,7 @@ class BlackHoleBinary:
 
     @property
     def f_init(self):
+        self._f_init = make_quant(self._f_init,'Hz')
         return self._f_init
     @f_init.setter
     def f_init(self,value):
@@ -685,6 +707,7 @@ class BlackHoleBinary:
 
     @property
     def T_obs(self):
+        self._T_obs = make_quant(self._T_obs,'s')
         return self._T_obs
     @T_obs.setter
     def T_obs(self,value):
@@ -831,6 +854,7 @@ class TimeDomain:
 
     @property
     def M(self):
+        self._M = make_quant(self._M,'M_sun')
         return self._M
     @M.setter
     def M(self,value):
@@ -856,7 +880,8 @@ class TimeDomain:
     @property
     def t(self):
         if not hasattr(self,'_t'):
-            self._t = self._diff_data[:,0]*u.s
+            self._t = self._diff_data[:,0]
+        self._t = make_quant(self._t,'s')
         return self._t
 
     @property
@@ -990,6 +1015,31 @@ def Get_CharStrain(source):
         return h_char
     else:
         raise ValueError('You need to get f and h_f first. \n')
+
+def make_quant(param, default_unit):
+    """
+    Taken from https://github.com/Hazboun6/hasasia/blob/master/hasasia/sensitivity.py#L834
+    Convenience function to intialize a parameter as an astropy quantity.
+    param == parameter to initialize.
+    default_unit == string that matches an astropy unit, set as
+                    default for this parameter.
+    returns:
+        an astropy quantity
+    example:
+        self.f0 = make_quant(f0,'MHz')
+    """
+    default_unit = u.core.Unit(default_unit)
+    if hasattr(param, 'unit'):
+        try:
+            param.to(default_unit)
+        except u.UnitConversionError:
+            raise ValueError("Quantity {0} with incompatible unit {1}"
+                             .format(param, default_unit))
+        quantity = param
+    else:
+        quantity = param * default_unit
+
+    return quantity
 
 
 def Get_Var_Dict(obj,value):

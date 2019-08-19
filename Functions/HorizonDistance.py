@@ -18,15 +18,17 @@ from astropy.cosmology import WMAP9 as cosmo
 
 from fractions import Fraction
 
-import StrainandNoise_v3 as SnN
+import StrainandNoise_v4 as SnN
 
-def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh):
-    # # Setting Up Horizon Distance calculation
-    # Uses the variable given and the data range to sample the space either logrithmically or linearly based on the 
-    # selection of variables. Then it computes the Horizon for each value at the particular SNR
-    # given by rho_thresh (aka the threshold SNR).
-    # Returns the variable ranges used to calculate the horizon distance for each matrix and the horizon distance
-    # 
+def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh,redshift_array=None):
+    '''Setting Up Horizon Distance calculation
+        Uses the variable given and the data range to sample the space either logrithmically or linearly based on the 
+        selection of variables. 
+        Then it computes the Horizon for each value at the particular SNR given by rho_thresh (aka the threshold SNR).
+        It takes in a redshift_array corresponding to the output luminosity distances so the function can be used to
+            iteratively converge to correct luminosity distance values.
+        Returns the variable ranges used to calculate the horizon distance for each matrix and the horizon distance
+    '''
 
     if not hasattr(source,'instrument'):
         source.instrument = instrument
@@ -34,6 +36,8 @@ def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh):
     [sample_x,recalculate_strain,recalculate_noise] = Get_Samples(source,instrument,var_x,sampleRate_x)
 
     sampleSize_x = len(sample_x)
+    if redshift_array == None:
+        redshift_array = np.ones(sampleSize_x)*source.z
     DL_array = np.zeros(sampleSize_x)
     
     for i in range(sampleSize_x):
@@ -55,7 +59,10 @@ def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh):
                 #Update Attribute (also updates dictionary)
                 setattr(source,var_x,sample_x[i])
 
-            checkFreqEvol_no_redshift(source)
+            #Update particular source's redshift
+            setattr(source,'z',redshift_array[i])
+
+            source.checkFreqEvol()
             #print(source.ismono)
             if source.ismono: #Monochromatic Source and not diff EOB SNR
                 DL_array[i] = calcMonoHD(source,instrument,rho_thresh)
@@ -70,7 +77,10 @@ def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh):
                     del source.f
                 DL_array[i] = calcChirpHD(source,instrument,rho_thresh)
 
-    return [sample_x,DL_array*u.m.to('Mpc')]
+            DL_array *= u.m.to('Mpc')
+            print(DL_array)
+
+    return [sample_x,DL_array,z_at_value(cosmo.luminosity_distance,DL_array)]
 
 def Get_Samples(source,instrument,var_x,sampleRate_x):
     ''' Takes in a object (either for the instrument or source), and the variables
@@ -158,7 +168,8 @@ def calcChirpHD(source,instrument,rho_thresh):
                 Uses an interpolated method to align waveform and instrument noise, then integrates 
                 over the overlapping region. See eqn 18 from Robson,Cornish,and Liu 2018 https://arxiv.org/abs/1803.01944
                 Values outside of the sensitivity curve are arbitrarily set to 1e30 so the SNR is effectively 0
-                Uses a constant SNR of rho_thresh'''
+                Uses a constant SNR of rho_thresh
+    '''
 
     m_conv = const.G*const.M_sun/const.c**3 #Converts M = [M] to M = [sec]
     M_time = source.M*m_conv
@@ -195,48 +206,13 @@ def calcChirpHD(source,instrument,rho_thresh):
 
     integrand = numer/denom
     if isinstance(integrand,u.Quantity) and isinstance(f_cut,u.Quantity):
-        DLsqrd = integral_consts*np.trapz(integrand.value,f_cut.value,axis=0) #SNR**2
+        DLsqrd = integral_consts*np.trapz(integrand.value,f_cut.value,axis=0) #DL**2
     elif not isinstance(integrand,u.Quantity) and isinstance(f_cut,u.Quantity):
-        DLsqrd = integral_consts*np.trapz(integrand,f_cut.value,axis=0) #SNR**2
+        DLsqrd = integral_consts*np.trapz(integrand,f_cut.value,axis=0) #DL**2
     else:
-        DLsqrd = integral_consts*np.trapz(integrand,f_cut,axis=0) #SNR**2
+        DLsqrd = integral_consts*np.trapz(integrand,f_cut,axis=0) #DL**2
 
     return np.sqrt(DLsqrd)
-
-def checkFreqEvol_no_redshift(source):
-    #####################################
-    #If the initial observed time from merger is less than the time observed
-    #(ie t_init-T_obs < 0 => f_evolve is complex),
-    #the BBH will or has already merged during the observation
-
-    #If the initial observed time from merger is greater than the time observed
-    #(ie t_init-T_obs > 0 => f_evolve is real),
-    #And if the frequency of the binary does evolve over more than one bin,
-    #(ie f_T_obs-f_init < 1/T_obs), it is monochromatic, so we set the frequency
-    #to the optimal frequency of the detector
-
-    #Otherwise it is chirping and evolves over the observation and we
-    #set the starting frequency we observe it at to f(Tobs), which is the 
-    #frequency at an observation time before merger
-    #####################################
-    m_conv = const.G*const.M_sun/const.c**3 #Converts M = [M] to M = [sec]
-    
-    eta = source.q/(1+source.q)**2
-    M_time = source.M*m_conv
-    M_chirp = eta**(3/5)*M_time
-
-    #from eqn 41 from Hazboun,Romano, and Smith (2019) https://arxiv.org/abs/1907.04341
-    t_init = 5*(M_chirp)**(-5/3)*(8*np.pi*source.f_init)**(-8/3)
-    #f(t) from eqn 40
-    f_evolve = 1./8./np.pi/M_chirp*(5*M_chirp/(t_init-source.T_obs))**(3./8.)
-    source.f_T_obs = 1./8./np.pi/M_chirp*(5*M_chirp/source.T_obs)**(3./8.)
-    #del(f) from eqn 42
-    delf = 1./8./np.pi/M_chirp*(5*M_chirp/t_init)**(3./8.)*(3*source.T_obs/8/t_init)
-    
-    if delf < (1/source.T_obs):
-        source.ismono = True
-    else:
-        source.ismono = False
 
 
 def plotHD(source,instrument,var_x,sample_x,DL_array,display=True,figloc=None):
