@@ -179,6 +179,7 @@ def calcChirpHD(source,instrument,rho_thresh):
 
     m_conv = const.G/const.c**3 #Converts M = [M] to M = [sec]
     M_time = source.M.to('kg')*m_conv
+    M_redshifted_time = source.M.to('kg')*(1+source.z)*m_conv
 
     #Only want to integrate from observed frequency (f(T_obs_before_merger)) till merger
     source.f = source._phenomD_f/M_time
