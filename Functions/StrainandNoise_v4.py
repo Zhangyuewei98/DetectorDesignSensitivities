@@ -193,8 +193,8 @@ class PTA:
             if not hasattr(self,'alpha_GWB'):
                 self.alpha_GWB = -2/3.
             #Make a set of psrs with the same parameters with a GWB as red noise
-            psrs = hassim.sim_pta(timespan=self.T_obs.value,cad=self.cadence.value,sigma=self.sigma.value,
-            phi=phi, theta=theta, Npsrs=self.N_p,A_rn=self.A_GWB,alpha=self.alpha_GWB,freqs=self.fT.value)
+            psrs = hassim.sim_pta(timespan=self.T_obs.value,cad=self.cadence.value,sigma=self.sigma.value,\
+                phi=phi, theta=theta, Npsrs=self.N_p,A_rn=self.A_GWB,alpha=self.alpha_GWB,freqs=self.fT.value)
         elif hasattr(self,'A_rn_min') or hasattr(self,'alpha_rn_min'):
             if not hasattr(self,'A_rn_min'):
                 A_rn = np.random.uniform(1e-16,1e-12,size=self.N_p)
@@ -205,11 +205,11 @@ class PTA:
             else:
                 alphas = np.random.uniform(self.alpha_rn_min,self.alpha_rn_max,size=self.N_p)            
             #Make a set of psrs with uniformly sampled red noise
-            psrs = hassim.sim_pta(timespan=self.T_obs.value,cad=self.cadence.value,sigma=self.sigma.value,
-            phi=phi, theta=theta, Npsrs=self.N_p,A_rn=A_rn,alpha=alphas,freqs=self.fT.value)
+            psrs = hassim.sim_pta(timespan=self.T_obs.value,cad=self.cadence.value,sigma=self.sigma.value,\
+                phi=phi, theta=theta, Npsrs=self.N_p,A_rn=A_rn,alpha=alphas,freqs=self.fT.value)
         else:
             #Make a set of psrs with the same parameters
-            psrs = hassim.sim_pta(timespan=self.T_obs.value,cad=self.cadence.value,sigma=self.sigma.value,
+            psrs = hassim.sim_pta(timespan=self.T_obs.value,cad=self.cadence.value,sigma=self.sigma.value,\
                 phi=phi, theta=theta, Npsrs=self.N_p,freqs=self.fT.value)
         #Get Spectra of pulsars
         spectra= []
@@ -799,7 +799,7 @@ class BlackHoleBinary:
         if not hasattr(self,'_fitcoeffs'):
             self.Get_fitcoeffs()
 
-        Vars = [self.M,self.q,self.chi1,self.chi2,self.z]
+        Vars = [self.M.value,self.q,self.chi1,self.chi2,self.z]
 
         [self._phenomD_f,self._phenomD_h] = PhenomD.FunPhenomD(Vars,self._fitcoeffs,self.nfreqs,f_low=self.f_low.value)
 

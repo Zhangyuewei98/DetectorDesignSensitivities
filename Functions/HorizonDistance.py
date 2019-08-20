@@ -55,7 +55,7 @@ def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh,redshift_
             if hasattr(instrument,'h_n_f'):
                 del instrument.h_n_f
             source.instrument = instrument
-        elif recalculate_noise == False:
+        else:
             #Update Attribute (also updates dictionary)
             setattr(source,var_x,sample_x[i])
 
@@ -63,7 +63,7 @@ def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh,redshift_
         setattr(source,'z',redshift_array[i])
 
         source.checkFreqEvol()
-        #print(source.ismono)
+        print(source.ismono)
         if source.ismono: #Monochromatic Source and not diff EOB SNR
             DL_array[i] = calcMonoHD(source,instrument,rho_thresh)
         else: #Chirping Source
@@ -82,7 +82,7 @@ def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh,redshift_
     new_redshift_array = np.zeros(np.shape(DL_array))
     for i,DL in enumerate(DL_array):
         if np.log10(DL.value) < -3:
-            new_redshift_array[i] = -5
+            new_redshift_array[i] = 1e-5
         else:
             new_redshift_array[i] = z_at_value(cosmo.luminosity_distance,DL)
 

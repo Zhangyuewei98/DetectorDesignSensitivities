@@ -39,9 +39,6 @@ def getSNRMatrix(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y):
     #Get Samples for variables
     [sample_x,sample_y,recalculate_strain,recalculate_noise] = Get_Samples(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y)
 
-    #Make sure samples have the correct astropy units
-    [sample_x,sample_y] = Handle_Units(sample_x,var_x,sample_y,var_y)
-
     sampleSize_x = len(sample_x)
     sampleSize_y = len(sample_y)
     SNRMatrix = np.zeros((sampleSize_x,sampleSize_y))
@@ -116,7 +113,7 @@ def Get_Samples(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y):
         recalculate_noise = 'x'
         var_x_dict = instrument.var_dict[var_x]
     else:
-        raise ValueError(var_x + ' is not a variable in the source or the instrument.')
+        raise ValueError(var_x + ' is not a variable in the source nor the instrument.')
     
     if var_y in source.var_dict.keys():
         var_y_dict = source.var_dict[var_y]
@@ -127,7 +124,7 @@ def Get_Samples(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y):
             recalculate_noise = 'y'
         var_y_dict = instrument.var_dict[var_y]
     else:
-        raise ValueError(var_y + ' is not a variable in the source or the instrument.')
+        raise ValueError(var_y + ' is not a variable in the source nor the instrument.')
 
     if var_x_dict['min'] != None and var_x_dict['max'] != None: #If the variable has non-None 'min',and 'max' dictionary attributes
         if var_x == 'q' or var_x == 'chi1' or var_x == 'chi2':
@@ -178,29 +175,6 @@ def Get_Samples(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y):
                 sample_y = np.logspace(np.log10(var_y_dict['min']),np.log10(var_y_dict['max']),sampleRate_y)
 
     return sample_x,sample_y,recalculate_strain,recalculate_noise
-
-def Handle_Units(sample_x,var_x,sample_y,var_y):
-    '''Since I am using astropy units, I need to update units on the selected samples'''
-    #Handle x variables
-    if var_x == 'L' or var_x == 'A_IMS':
-        sample_x = sample_x*u.m
-    elif var_x == 'T_obs' or var_x == 'sigma':
-        sample_x = sample_x*u.s
-    elif var_x == 'A_acc':
-        sample_x = sample_x*u.m/u.s/u.s
-    elif var_x == 'f_acc_break_high' or var_x == 'f_acc_break_low' or var_x == 'cadence':
-        sample_x = sample_x/u.s
-    #Handle y variables
-    if var_y == 'L' or var_y == 'A_IMS':
-        sample_y = sample_y*u.m
-    elif var_y == 'T_obs' or var_y == 'sigma':
-        sample_y = sample_y*u.s
-    elif var_y == 'A_acc':
-        sample_y = sample_y*u.m/u.s/u.s
-    elif var_y == 'f_acc_break_high' or var_y == 'f_acc_break_low' or var_y == 'cadence':
-        sample_y = sample_y/u.s
-
-    return sample_x,sample_y
 
 def calcMonoSNR(source,instrument):
     #SNR for a monochromatic source in a PTA
@@ -283,13 +257,16 @@ def calcDiffSNR(source,instrument):
     return SNR
 
 def plotSNR(source,instrument,var_x,sample_x,var_y,sample_y,SNRMatrix,display=True,dl_axis=False,smooth_contours=False,figloc=None):
-    '''Plots the SNR contours from calcSNR'''
-    #Selects contour levels to separate sections into
-    '''contLevels_max = round(max(SNRMatrix))
-    contLevels = np.array([5,10, 1e2, 1e3, 1e4, 1e5, 1e6])
-    #contLevels = np.array([1,10, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7,1e8,1e9])
-    #contLevels = np.array([1,10, 1e2, 1e3, 1e4])
-    logLevels = np.log10(contLevels)'''
+    '''Plots the SNR contours from calcSNR
+        Takes in the source and instrument objects
+        x and y-axis variables along with the corresponding samples
+        The SNRMatrix from getSNRMatrix
+        display can be turned off for running multiple saves to file
+        dl_axis turns on the right hand side labels of luminosity distance 
+        smooth_contours turns on a finer mesh size to appear smooth instead of tiered contours
+        figloc is None, unless saving the figure to a file by the string figloc = '/path/to/save/location/figname.type'
+    '''
+
     axissize = 16
     labelsize = 18
     textsize = 12
