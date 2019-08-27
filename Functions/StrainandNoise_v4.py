@@ -826,12 +826,25 @@ class BlackHoleBinary:
         M_chirp = eta**(3/5)*M_redshifted_time
 
         #from eqn 41 from Hazboun,Romano, and Smith (2019) https://arxiv.org/abs/1907.04341
-        t_init = 5*(M_chirp)**(-5/3)*(8*np.pi*self.f_init)**(-8/3)
+        t_init = 5*(M_chirp)**(-5/3)*(8*np.pi*self.f_init/(1+self.z))**(-8/3)
+        tau = eta*t_init/(5*M_redshifted_time)
+        tau2 = eta*(t_init-self.T_obs)/(5*M_redshifted_time)
+        print('t_init: ',t_init)
+        print('tau: ',tau)
+        print('tau2: ',tau2)
         #f(t) from eqn 40
-        f_evolve = 1./8./np.pi/M_chirp*(5*M_chirp/(t_init-self.T_obs))**(3./8.)
+        f_evolve = 1./8./np.pi/M_chirp*(5*M_chirp/tau2)**(3./8.)
+        print('f_evolve: ',f_evolve)
+        self.f_evolve = 1./8./np.pi/M_chirp*(5*M_chirp/(t_init-self.T_obs))**(3./8.)
         self.f_T_obs = 1./8./np.pi/M_chirp*(5*M_chirp/self.T_obs)**(3./8.)
         #del(f) from eqn 42
         delf = 1./8./np.pi/M_chirp*(5*M_chirp/t_init)**(3./8.)*(3*self.T_obs/8/t_init)
+
+        print('delf: ',delf)
+        print('f_init: ',self.f_init)
+        print('f_T_obs: ',self.f_T_obs)
+        print('f_evolve: ',self.f_evolve)
+        print('f_diff: ',self.f_init-self.f_evolve)
         
         if delf < (1/self.T_obs):
             self.ismono = True

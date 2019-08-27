@@ -149,8 +149,8 @@ def calcMonoHD(source,instrument,rho_thresh):
     m_conv = const.G/const.c**3 #Converts M = [M] to M = [sec]
 
     eta = source.q/(1+source.q)**2
-    M_time = source.M.to('kg')*m_conv
-    M_chirp = eta**(3/5)*M_time
+    M_redshifted_time = self.M.to('kg')*(1+self.z)*m_conv
+    M_chirp = eta**(3/5)*M_redshifted_time
     #Source is emitting at one frequency (monochromatic)
     #strain of instrument at f_cw
     if isinstance(instrument,SnN.PTA):
@@ -178,12 +178,12 @@ def calcChirpHD(source,instrument,rho_thresh):
     '''
 
     m_conv = const.G/const.c**3 #Converts M = [M] to M = [sec]
-    M_time = source.M.to('kg')*m_conv
     M_redshifted_time = source.M.to('kg')*(1+source.z)*m_conv
 
     #Only want to integrate from observed frequency (f(T_obs_before_merger)) till merger
-    source.f = source._phenomD_f/M_time
-    indxfgw = np.abs(source.f-source.f_T_obs).argmin()
+    indxfgw_start = np.abs(source.f-source.f_init).argmin()
+    indxfgw_end = np.abs(source.f-source.f_evolve).argmin()
+    
     if indxfgw >= len(source.f)-1:
         #If the SMBH has already merged set the SNR to ~0
         print('TOO LOW')
