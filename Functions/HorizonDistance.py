@@ -182,7 +182,7 @@ def calcChirpHD(source,instrument,rho_thresh):
 
     #Only want to integrate from observed frequency (f(T_obs_before_merger)) till merger
     indxfgw_start = np.abs(source.f-source.f_init).argmin()
-    indxfgw_end = np.abs(source.f-source.f_evolve).argmin()
+    indxfgw_end = np.abs(source.f-source.f_T_obs).argmin()
     
     if indxfgw >= len(source.f)-1:
         #If the SMBH has already merged set the SNR to ~0

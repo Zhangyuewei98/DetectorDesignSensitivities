@@ -820,33 +820,37 @@ class BlackHoleBinary:
         #frequency at an observation time before merger
         #####################################
         m_conv = const.G/const.c**3 #Converts M = [M] to M = [sec]
-        
         eta = self.q/(1+self.q)**2
+
+        M_time = self.M.to('kg')*m_conv
+        M_chirp_source = eta**(3/5)*M_time
+        
+        #Assumes f_init is in instrument frame
+        t_init_source = 5*(M_chirp_source)**(-5/3)*(8*np.pi*self.f_init*(1+self.z))**(-8/3)
+        #print('t_init_source: ',t_init_source.to('yr'))
+        T_obs_source = self.T_obs/(1+self.z)
+        #print('T_obs_source: ',T_obs_source.to('yr'))
+        f_end_source = 1./8./np.pi/M_chirp_source*\
+                        (5*M_chirp_source/(t_init_source-T_obs_source))**(3./8.)
+        #print('f_end_source: ',f_end_source)
+        self.f_T_obs = f_end_source/(1+self.z)
+        delf_source = f_end_source - self.f_init*(1+self.z)
+        #print('delf_source: ',delf_source)
+        delf_obs = f_end_obs - self.f_init
+        #print('delf_obs: ', delf_obs)
+
+        '''
         M_redshifted_time = self.M.to('kg')*(1+self.z)*m_conv
         M_chirp = eta**(3/5)*M_redshifted_time
-
-        #from eqn 41 from Hazboun,Romano, and Smith (2019) https://arxiv.org/abs/1907.04341
         t_init = 5*(M_chirp)**(-5/3)*(8*np.pi*self.f_init/(1+self.z))**(-8/3)
-        tau = eta*t_init/(5*M_redshifted_time)
-        tau2 = eta*(t_init-self.T_obs)/(5*M_redshifted_time)
-        print('t_init: ',t_init)
-        print('tau: ',tau)
-        print('tau2: ',tau2)
         #f(t) from eqn 40
-        f_evolve = 1./8./np.pi/M_chirp*(5*M_chirp/tau2)**(3./8.)
-        print('f_evolve: ',f_evolve)
         self.f_evolve = 1./8./np.pi/M_chirp*(5*M_chirp/(t_init-self.T_obs))**(3./8.)
         self.f_T_obs = 1./8./np.pi/M_chirp*(5*M_chirp/self.T_obs)**(3./8.)
-        #del(f) from eqn 42
+        #from eqn 41 from Hazboun,Romano, and Smith (2019) https://arxiv.org/abs/1907.04341
         delf = 1./8./np.pi/M_chirp*(5*M_chirp/t_init)**(3./8.)*(3*self.T_obs/8/t_init)
-
-        print('delf: ',delf)
-        print('f_init: ',self.f_init)
-        print('f_T_obs: ',self.f_T_obs)
-        print('f_evolve: ',self.f_evolve)
-        print('f_diff: ',self.f_init-self.f_evolve)
+        '''
         
-        if delf < (1/self.T_obs):
+        if delf_obs < (1/self.T_obs):
             self.ismono = True
         else:
             self.ismono = False
@@ -1049,7 +1053,7 @@ def make_quant(param, default_unit):
         except u.UnitConversionError:
             raise ValueError("Quantity {0} with incompatible unit {1}"
                              .format(param, default_unit))
-        quantity = param
+        quantity = param.to(default_unit)
     else:
         quantity = param * default_unit
 
