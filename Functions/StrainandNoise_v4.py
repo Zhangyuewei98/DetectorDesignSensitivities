@@ -836,7 +836,7 @@ class BlackHoleBinary:
         self.f_T_obs = f_end_source/(1+self.z)
         delf_source = f_end_source - self.f_init*(1+self.z)
         #print('delf_source: ',delf_source)
-        delf_obs = f_end_obs - self.f_init
+        delf_obs = self.f_T_obs - self.f_init
         #print('delf_obs: ', delf_obs)
 
         '''

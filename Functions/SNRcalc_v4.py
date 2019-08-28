@@ -194,13 +194,14 @@ def calcChirpSNR(source,instrument):
     # Values outside of the sensitivity curve are arbitrarily set to 1e30 so the SNR is effectively 0
 
     #Only want to integrate from observed frequency (f(T_obs_before_merger)) till merger
-    indxfgw = np.abs(source.f-source.f_T_obs).argmin()
-    if indxfgw >= len(source.f)-1:
+    indxfgw_start = np.abs(source.f-source.f_init).argmin()
+    indxfgw_end = np.abs(source.f-source.f_T_obs).argmin()
+    if indxfgw_end >= len(source.f)-1:
         #If the SMBH has already merged set the SNR to ~0
         return 1e-30  
     else:
-        f_cut = source.f[indxfgw:]
-        h_cut = source.h_f[indxfgw:]
+        f_cut = source.f[indxfgw_start:indxfgw_end]
+        h_cut = source.h_f[indxfgw_start:indxfgw_end]
 
     #################################
     #Interpolate the Strain Noise Spectral Density to only the frequencies the

@@ -184,13 +184,13 @@ def calcChirpHD(source,instrument,rho_thresh):
     indxfgw_start = np.abs(source.f-source.f_init).argmin()
     indxfgw_end = np.abs(source.f-source.f_T_obs).argmin()
     
-    if indxfgw >= len(source.f)-1:
+    if indxfgw_end >= len(source.f)-1:
         #If the SMBH has already merged set the SNR to ~0
         print('TOO LOW')
         return 1e-30  
     else:
-        f_cut = source.f[indxfgw:]
-        nat_h_cut = source._phenomD_h[indxfgw:]
+        f_cut = source.f[indxfgw_start:indxfgw_end]
+        nat_h_cut = source._phenomD_h[indxfgw_start:indxfgw_end]
 
     #################################
     #Interpolate the Strain Noise Spectral Density to only the frequencies the
@@ -205,7 +205,7 @@ def calcChirpHD(source,instrument,rho_thresh):
     elif isinstance(instrument,SnN.SpaceBased) or isinstance(instrument,SnN.GroundBased):
         integral_consts = 16./5.
 
-    integral_consts *= (const.c**2)/4./np.pi*M_time**4/rho_thresh**2
+    integral_consts *= (const.c**2)/4./np.pi*M_redshifted_time**4/rho_thresh**2
     integral_consts = integral_consts.value
 
     #CALCULATE SNR FOR BOTH NOISE CURVES
