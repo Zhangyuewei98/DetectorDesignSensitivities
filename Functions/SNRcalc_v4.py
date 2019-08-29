@@ -34,8 +34,6 @@ def getSNRMatrix(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y):
     # Returns the variable ranges used to calculate the SNR for each matrix, then returns the SNRs with size of the sample_yXsample_x
     # 
 
-    if not hasattr(source,'instrument'):
-        source.instrument = instrument
     #Get Samples for variables
     [sample_x,sample_y,recalculate_strain,recalculate_noise] = Get_Samples(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y)
 
@@ -75,9 +73,8 @@ def getSNRMatrix(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y):
                     del instrument.h_n_f
                 if isinstance(instrument,SnN.PTA) and hasattr(instrument,'_sensitivitycurve'):
                     del instrument._sensitivitycurve
-                source.instrument = instrument
 
-            source.checkFreqEvol()
+            source.checkFreqEvol(instrument.T_obs)
             if source.ismono: #Monochromatic Source and not diff EOB SNR
                 if hasattr(source,'h_gw'):
                     del source.h_gw
@@ -184,7 +181,7 @@ def calcMonoSNR(source,instrument):
     	source.h_gw = 'Averaged'
     indxfgw = np.abs(instrument.fT-source.f_init).argmin()
 
-    return source.h_gw/np.sqrt(instrument.S_n_f[indxfgw])
+    return source.h_gw*np.sqrt(instrument.T_obs.to('s')/instrument.S_n_f[indxfgw])
 
 def calcChirpSNR(source,instrument):
     #Calculates evolving source using non-precessing binary black hole waveform model IMRPhenomD

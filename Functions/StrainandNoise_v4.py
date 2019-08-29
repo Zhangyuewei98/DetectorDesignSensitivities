@@ -476,10 +476,8 @@ class SpaceBased:
                 if self._I_Type == 'ASD':
                     S_n_f_sqrt = self._I_data[:,1]
                     self._S_n_f = S_n_f_sqrt**2
-                    self._S_n_f = make_quant(self._S_n_f,'1/Hz')
                 elif self._I_Type == 'ENSD':
                     self._S_n_f = self._I_data[:,1]
-                    self._S_n_f = make_quant(self._S_n_f,'1/Hz')
                 elif self._I_Type == 'h':
                     self._S_n_f = self.h_n_f**2/self.fT
             else:
@@ -488,6 +486,7 @@ class SpaceBased:
                     self._S_n_f= S_n_f+self.Add_Background() 
                 else:
                     self._S_n_f = S_n_f
+        self._S_n_f = make_quant(self._S_n_f,'1/Hz')
         return self._S_n_f
     @S_n_f.deleter
     def S_n_f(self):
@@ -612,7 +611,7 @@ class SpaceBased:
 class BlackHoleBinary:
     def __init__(self,*args,**kwargs):
         '''args order: M,q,chi1,chi2,z,inc
-            kwargs: instrument=None,f_low=1e-5,nfreqs=int(1e3)'''
+            kwargs: f_low=1e-5,nfreqs=int(1e3)'''
 
         [M,q,chi1,chi2,z,inc] = args
         self.M = M
@@ -629,9 +628,6 @@ class BlackHoleBinary:
                 self.f_high = value
             elif keys == 'nfreqs':
                 self.nfreqs = value
-            elif keys == 'instrument':
-                self.instrument = value
-                self.checkFreqEvol()
         if not hasattr(self,'nfreqs'):
             self.nfreqs = int(1e3)
         if not hasattr(self,'f_low'):
@@ -689,31 +685,6 @@ class BlackHoleBinary:
         self._inc = self._return_value
 
     @property
-    def instrument(self):
-        return self._instrument
-    @instrument.setter
-    def instrument(self,value):
-        self._instrument = value
-        self.T_obs = value.T_obs.to('s')
-        self.f_init = value.f_opt
-
-    @property
-    def f_init(self):
-        self._f_init = make_quant(self._f_init,'Hz')
-        return self._f_init
-    @f_init.setter
-    def f_init(self,value):
-        self._f_init = value
-
-    @property
-    def T_obs(self):
-        self._T_obs = make_quant(self._T_obs,'s')
-        return self._T_obs
-    @T_obs.setter
-    def T_obs(self,value):
-        self._T_obs = value
-
-    @property
     def h_gw(self):
         if not hasattr(self,'_h_gw'):
             self.h_gw = 'Averaged'
@@ -746,7 +717,7 @@ class BlackHoleBinary:
             else:
                 raise ValueError('Can only use "UseInc" or "Averaged" monochromatic strain calculation.')
 
-            self._h_gw = const_val*np.sqrt(self.T_obs)*(const.c/DL)*(np.pi*self.f_init)**(2./3.)*M_chirp**(5./3.)
+            self._h_gw = const_val*(const.c/DL)*(np.pi*self.f_init)**(2./3.)*M_chirp**(5./3.)
         else:
             raise ValueError('Can only use "UseInc" or "Averaged" monochromatic strain calculation.')
     @h_gw.deleter
@@ -803,7 +774,7 @@ class BlackHoleBinary:
 
         [self._phenomD_f,self._phenomD_h] = PhenomD.FunPhenomD(Vars,self._fitcoeffs,self.nfreqs,f_low=self.f_low.value)
 
-    def checkFreqEvol(self):
+    def checkFreqEvol(self,T_obs):
         #####################################
         #If the initial observed time from merger is less than the time observed
         #(ie t_init-T_obs < 0 => f_evolve is complex),
@@ -824,22 +795,45 @@ class BlackHoleBinary:
 
         M_time = self.M.to('kg')*m_conv
         M_chirp_source = eta**(3/5)*M_time
-        
-        #Assumes f_init is in instrument frame
-        t_init_source = 5*(M_chirp_source)**(-5/3)*(8*np.pi*self.f_init*(1+self.z))**(-8/3)
-        #print('t_init_source: ',t_init_source.to('yr'))
-        T_obs_source = self.T_obs/(1+self.z)
+
+        T_obs = make_quant(T_obs,'s')
+
+        T_obs_source = T_obs/(1+self.z)
         #print('T_obs_source: ',T_obs_source.to('yr'))
-        f_end_source = 1./8./np.pi/M_chirp_source*\
+
+        #Assumes t_init is in source frame, can either be randomly drawn
+        #   or set to T_obs
+        #t_init_source = np.random.uniform(0,100)*u.yr
+        t_init_source = T_obs_source
+
+        f_init_source = 1./8./np.pi/M_chirp_source*\
+                        (5*M_chirp_source/t_init_source)**(3./8.)
+        #print('f_init_source: ',f_init_source)
+        
+        self.f_init = f_init_source/(1+self.z)
+        #print('f_init_inst: ',self.f_init)
+        
+        
+        f_T_obs_source = 1./8./np.pi/M_chirp_source*\
                         (5*M_chirp_source/(t_init_source-T_obs_source))**(3./8.)
-        #print('f_end_source: ',f_end_source)
-        self.f_T_obs = f_end_source/(1+self.z)
-        delf_source = f_end_source - self.f_init*(1+self.z)
-        #print('delf_source: ',delf_source)
-        delf_obs = self.f_T_obs - self.f_init
-        #print('delf_obs: ', delf_obs)
+        #print('f_end_source: ',f_T_obs_source)
+        
+        self.f_T_obs = f_T_obs_source/(1+self.z)
+        #print('f_T_obs_inst: ',self.f_T_obs)
+        
+        delf_obs_source_exact = f_T_obs_source-f_init_source
+        #print('delf_source: ',delf_obs_source_exact)
+        
+        #from eqn 41 from Hazboun,Romano, and Smith (2019) https://arxiv.org/abs/1907.04341
+        #Uses binomial expansion of f_T_obs_inst - f_init_inst
+        #Will not ever be imaginary, so probably better to use
+        delf_obs_source_approx = 1./8./np.pi/M_chirp_source*(5*M_chirp_source/t_init_source)**(3./8.)*(3*T_obs_source/8/t_init_source)
+        #print('delf_Jeff: ',delf_obs_source_approx)
+        
+        delf_obs =  delf_obs_source_approx/(1+self.z)
 
         '''
+        Old way I was doing this....
         M_redshifted_time = self.M.to('kg')*(1+self.z)*m_conv
         M_chirp = eta**(3/5)*M_redshifted_time
         t_init = 5*(M_chirp)**(-5/3)*(8*np.pi*self.f_init/(1+self.z))**(-8/3)
@@ -850,7 +844,7 @@ class BlackHoleBinary:
         delf = 1./8./np.pi/M_chirp*(5*M_chirp/t_init)**(3./8.)*(3*self.T_obs/8/t_init)
         '''
         
-        if delf_obs < (1/self.T_obs):
+        if delf_obs < (1/T_obs):
             self.ismono = True
         else:
             self.ismono = False
@@ -1018,6 +1012,7 @@ def StrainConv(source,natural_f,natural_h):
     m_conv = const.G/const.c**3 #Converts M = [M] to M = [sec]
     M_redshifted_time = source.M.to('kg')*(1+source.z)*m_conv
     
+    #frequency and strain of source in detector frame
     freq_conv = 1/M_redshifted_time
     #Normalized factor to match Stationary phase approx at low frequencies?
     #Changed from sqrt(5/16/pi)
