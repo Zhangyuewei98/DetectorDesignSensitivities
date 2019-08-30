@@ -160,7 +160,7 @@ class PTA:
             if not hasattr(self,'_sensitivitycurve'):
                 self.Init_PTA()
             self._S_n_f = self._sensitivitycurve.S_eff
-        self._S_n_f = make_quant(self._S_n_f,'1/Hz')
+            self._S_n_f = make_quant(self._S_n_f,'1/Hz')
         return self._S_n_f
     @S_n_f.setter
     def S_n_f(self,value):
@@ -260,7 +260,7 @@ class GroundBased:
         if not hasattr(self,'_S_n_f'):
             S_n_f_sqrt = self._I_data[:,1]
             self._S_n_f = S_n_f_sqrt**2
-        self._S_n_f = make_quant(self._S_n_f,'1/Hz')
+            self._S_n_f = make_quant(self._S_n_f,'1/Hz')
         return self._S_n_f
     @S_n_f.deleter
     def S_n_f(self):
@@ -270,7 +270,7 @@ class GroundBased:
     def fT(self):
         if not hasattr(self,'_fT'):
             self._fT = self._I_data[:,0]*u.Hz
-        self._fT = make_quant(self._fT,'Hz')
+            self._fT = make_quant(self._fT,'Hz')
         return self._fT
     @fT.deleter
     def fT(self):
@@ -436,7 +436,7 @@ class SpaceBased:
             else:
                 self.Set_Tfunction_Type()
 
-        self._fT = make_quant(self._fT,'Hz')
+            self._fT = make_quant(self._fT,'Hz')
         return self._fT
     @fT.setter
     def fT(self,value):
@@ -463,7 +463,7 @@ class SpaceBased:
 
             f_trans = const.c/2/np.pi/self.L #Transfer frequency
             self._P_n_f = (P_IMS + 2*(1+np.cos(self.fT.value/f_trans.value)**2)*P_acc)/self.L**2/u.Hz
-        self._P_n_f = make_quant(self._P_n_f,'1/Hz')
+            self._P_n_f = make_quant(self._P_n_f,'1/Hz')
         return self._P_n_f
     @P_n_f.deleter
     def P_n_f(self):
@@ -487,7 +487,7 @@ class SpaceBased:
                     self._S_n_f= S_n_f+self.Add_Background() 
                 else:
                     self._S_n_f = S_n_f
-        self._S_n_f = make_quant(self._S_n_f,'1/Hz')
+            self._S_n_f = make_quant(self._S_n_f,'1/Hz')
         return self._S_n_f
     @S_n_f.deleter
     def S_n_f(self):
@@ -631,7 +631,7 @@ class BlackHoleBinary:
                 self.nfreqs = value
             elif keys == 'instrument':
                 self.instrument = value
-                self.checkFreqEvol(self.instrument)
+                self.checkFreqEvol()
         if not hasattr(self,'nfreqs'):
             self.nfreqs = int(1e3)
         if not hasattr(self,'f_low'):
@@ -700,7 +700,7 @@ class BlackHoleBinary:
         if not hasattr(self,'_h_gw'):
             if not hasattr(self,'f_init'):
                 if hasattr(self,'_instrument'):
-                    self.checkFreqEvol(self._instrument)
+                    self.checkFreqEvol()
                 else:
                     raise ValueError('No instrument assigned, please fix it. '\
                         'Try: "source.instrument = instrument".')
@@ -733,7 +733,7 @@ class BlackHoleBinary:
             if not (hasattr(self,'_phenomD_f') and hasattr(self,'_phenomD_h')):
                 self.Get_PhenomD_Strain()
             [self._f,self.h] = StrainConv(self,self._phenomD_f,self._phenomD_h)
-        self._f = make_quant(self._f,'Hz')
+            self._f = make_quant(self._f,'Hz')
         return self._f
     @f.setter
     def f(self,value):
@@ -788,7 +788,7 @@ class BlackHoleBinary:
 
         return 1./8./np.pi/M_chirp*(5*M_chirp/tau)**(3./8.)
 
-    def checkFreqEvol(self,instrument):
+    def checkFreqEvol(self):
         #####################################
         #If the initial observed time from merger is less than the time observed
         #(ie t_init-T_obs < 0 => f_evolve is complex),
@@ -810,30 +810,33 @@ class BlackHoleBinary:
         M_time = self.M.to('kg')*m_conv
         M_chirp_source = eta**(3/5)*M_time
 
-        T_obs = make_quant(instrument.T_obs,'s')
-
+        T_obs = make_quant(self.instrument.T_obs,'s')
         T_obs_source = T_obs/(1+self.z)
         #print('T_obs_source: ',T_obs_source.to('yr'))
 
+        '''
         #Assumes t_init is in source frame, can either be randomly drawn
-        #   or set to T_obs
-        #t_init_source = np.random.uniform(0,100)*u.yr
-        t_init_source = 4*u.yr
-        t_init_source = make_quant(t_init_source,'s')
+        t_init_source = np.random.uniform(0,100)*u.yr
+        '''
+        #Assumes f_init is the optimal frequency in the instrument frame to get t_init_source
+        t_init_source = self.Get_Time_from_Merger(self.instrument.f_opt)
 
-        f_init_source = self.Get_Source_Freq(t_init_source)
+        #t_init_source = make_quant(t_init_source,'s')
+        #print('t_init_source: ',t_init_source.to('yr'))
+
+        #f_init_source = self.Get_Source_Freq(t_init_source)
         #print('f_init_source: ',f_init_source)
         
-        self.f_init = f_init_source#/(1+self.z)
+        #self.f_init = f_init_source/(1+self.z)
         #print('f_init_inst: ',self.f_init)
         
-        f_T_obs_source = self.Get_Source_Freq((t_init_source-T_obs_source))
+        #f_T_obs_source = self.Get_Source_Freq((t_init_source-T_obs_source))
         #print('f_end_source: ',f_T_obs_source)
         
-        self.f_T_obs = f_T_obs_source#/(1+self.z)
+        #self.f_T_obs = f_T_obs_source/(1+self.z)
         #print('f_T_obs_inst: ',self.f_T_obs)
         
-        delf_obs_source_exact = f_T_obs_source-f_init_source
+        #delf_obs_source_exact = f_T_obs_source-f_init_source
         #print('delf_source: ',delf_obs_source_exact)
         
         #from eqn 41 from Hazboun,Romano, and Smith (2019) https://arxiv.org/abs/1907.04341
@@ -842,23 +845,28 @@ class BlackHoleBinary:
         delf_obs_source_approx = 1./8./np.pi/M_chirp_source*(5*M_chirp_source/t_init_source)**(3./8.)*(3*T_obs_source/8/t_init_source)
         #print('delf_Jeff: ',delf_obs_source_approx)
         
-        delf_obs =  delf_obs_source_approx#/(1+self.z)
+        delf_obs =  delf_obs_source_approx/(1+self.z)
+        #print('delf_obs: ',delf_obs)
 
         '''
-        Old way I was doing this....
+        #Old way I was doing this....
         M_redshifted_time = self.M.to('kg')*(1+self.z)*m_conv
         M_chirp = eta**(3/5)*M_redshifted_time
-        t_init = 5*(M_chirp)**(-5/3)*(8*np.pi*self.f_init/(1+self.z))**(-8/3)
+        t_init = 5*(M_chirp)**(-5/3)*(8*np.pi*self.instrument.f_opt)**(-8/3)
+        #print('t_init: ', t_init.to('yr'))
         #f(t) from eqn 40
-        self.f_evolve = 1./8./np.pi/M_chirp*(5*M_chirp/(t_init-self.T_obs))**(3./8.)
-        self.f_T_obs = 1./8./np.pi/M_chirp*(5*M_chirp/self.T_obs)**(3./8.)
+        f_evolve = 1./8./np.pi/M_chirp*(5*M_chirp/(t_init-T_obs))**(3./8.)
+        f_T_obs = 1./8./np.pi/M_chirp*(5*M_chirp/T_obs)**(3./8.)
         #from eqn 41 from Hazboun,Romano, and Smith (2019) https://arxiv.org/abs/1907.04341
-        delf = 1./8./np.pi/M_chirp*(5*M_chirp/t_init)**(3./8.)*(3*self.T_obs/8/t_init)
+        delf = 1./8./np.pi/M_chirp*(5*M_chirp/t_init)**(3./8.)*(3*T_obs/8/t_init)
+        print('delf old: ',delf)
+        print('')
         '''
         
         if delf_obs < (1/T_obs):
             self.ismono = True
         else:
+            self.f_init = self.Get_Source_Freq(T_obs)
             self.ismono = False
 
     
@@ -1091,11 +1099,10 @@ def make_quant(param, default_unit):
     default_unit = u.core.Unit(default_unit)
     if hasattr(param, 'unit'):
         try:
-            param.to(default_unit)
+            quantity = param.to(default_unit)
         except u.UnitConversionError:
             raise ValueError("Quantity {0} with incompatible unit {1}"
                              .format(param, default_unit))
-        quantity = param.to(default_unit)
     else:
         quantity = param * default_unit
 

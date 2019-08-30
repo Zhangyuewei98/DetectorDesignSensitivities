@@ -34,6 +34,7 @@ def getSNRMatrix(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y):
     # Returns the variable ranges used to calculate the SNR for each matrix, then returns the SNRs with size of the sample_yXsample_x
     # 
 
+    source.instrument = instrument
     #Get Samples for variables
     [sample_x,sample_y,recalculate_strain,recalculate_noise] = Get_Samples(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y)
 
@@ -74,7 +75,7 @@ def getSNRMatrix(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y):
                 if isinstance(instrument,SnN.PTA) and hasattr(instrument,'_sensitivitycurve'):
                     del instrument._sensitivitycurve
 
-            source.checkFreqEvol(instrument)
+            source.checkFreqEvol()
             if source.ismono: #Monochromatic Source and not diff EOB SNR
                 if hasattr(source,'h_gw'):
                     del source.h_gw
@@ -130,15 +131,9 @@ def Get_Samples(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y):
             recalculate_strain = True #Must recalculate the waveform at each point
         elif var_x == 'T_obs':
             #sample in linear space for instrument variables
-            #Need exception for astropy variables
-            if isinstance(var_x_dict['min'],u.Quantity) and isinstance(var_x_dict['max'],u.Quantity):
-                T_obs_min = var_x_dict['min'].to('s')
-                T_obs_max = var_x_dict['max'].to('s')
-                sample_x = np.linspace(T_obs_min.value,T_obs_max.value,sampleRate_x)
-            else:
-                T_obs_min = var_x_dict['min']*u.yr.to('s')
-                T_obs_max = var_x_dict['max']*u.yr.to('s')
-                sample_x = np.linspace(T_obs_min,T_obs_max,sampleRate_x)
+            T_obs_min = SnN.make_quant(var_x_dict['min'],'s')
+            T_obs_max = SnN.make_quant(var_x_dict['max'],'s')
+            sample_x = np.linspace(T_obs_min.value,T_obs_max.value,sampleRate_x)
         else:
             #Sample in log space for any other variables
             #Need exception for astropy variables
@@ -154,17 +149,11 @@ def Get_Samples(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y):
             recalculate_strain = True #Must recalculate the waveform at each point
         elif var_y == 'T_obs':
             #sample in linear space for instrument variables
-            #Need exception for astropy variables
-            if isinstance(var_y_dict['min'],u.Quantity) and isinstance(var_y_dict['max'],u.Quantity):
-                T_obs_min = var_y_dict['min'].to('s')
-                T_obs_max = var_y_dict['max'].to('s')
-                sample_y = np.linspace(T_obs_min.value,T_obs_max.value,sampleRate_y)
-            else:
-                T_obs_min = var_y_dict['min']*u.yr.to('s')
-                T_obs_max = var_y_dict['max']*u.yr.to('s')
-                sample_y = np.linspace(T_obs_min,T_obs_max,sampleRate_y)
+            T_obs_min = SnN.make_quant(var_y_dict['min'],'s')
+            T_obs_max = SnN.make_quant(var_y_dict['max'],'s')
+            sample_y = np.linspace(T_obs_min.value,T_obs_max.value,sampleRate_y)
         else:
-            #Sample in log space for any other variables 
+            #Sample in log space for any other variables
             #Need exception for astropy variables
             if isinstance(var_y_dict['min'],u.Quantity) and isinstance(var_y_dict['max'],u.Quantity):
                 sample_y = np.logspace(np.log10(var_y_dict['min'].value),np.log10(var_y_dict['max'].value),sampleRate_y)
@@ -192,8 +181,9 @@ def calcChirpSNR(source,instrument):
 
     #Only want to integrate from observed frequency (f(T_obs_before_merger)) till merger
     indxfgw_start = np.abs(source.f-source.f_init).argmin()
-    indxfgw_end = np.abs(source.f-source.f_T_obs).argmin()
-    if indxfgw_end >= len(source.f)-1:
+    #indxfgw_end = np.abs(source.f-source.f_T_obs).argmin()
+    indxfgw_end = len(source.f)
+    if indxfgw_start >= len(source.f)-1:
         #If the SMBH has already merged set the SNR to ~0
         return 1e-30  
     else:
