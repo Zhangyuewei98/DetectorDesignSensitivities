@@ -74,7 +74,7 @@ def getSNRMatrix(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y):
                 if isinstance(instrument,SnN.PTA) and hasattr(instrument,'_sensitivitycurve'):
                     del instrument._sensitivitycurve
 
-            source.checkFreqEvol(instrument.T_obs)
+            source.checkFreqEvol(instrument)
             if source.ismono: #Monochromatic Source and not diff EOB SNR
                 if hasattr(source,'h_gw'):
                     del source.h_gw
@@ -176,10 +176,10 @@ def Get_Samples(source,instrument,var_x,sampleRate_x,var_y,sampleRate_y):
 def calcMonoSNR(source,instrument):
     #SNR for a monochromatic source in a PTA
     if isinstance(instrument,SnN.PTA):
-    	source.h_gw = 'Hazboun'
+    	source.h_gw = SnN.Get_MonoStrain(source,instrument.f_opt,strain_const='Hazboun')
     else:
-    	source.h_gw = 'Averaged'
-    indxfgw = np.abs(instrument.fT-source.f_init).argmin()
+    	source.h_gw = SnN.Get_MonoStrain(source,instrument.f_opt,strain_const='Averaged')
+    indxfgw = np.abs(instrument.fT-instrument.f_opt).argmin()
 
     return source.h_gw*np.sqrt(instrument.T_obs.to('s')/instrument.S_n_f[indxfgw])
 

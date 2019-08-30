@@ -462,7 +462,8 @@ class SpaceBased:
             P_IMS = self.A_IFO**2*(1+(self.f_IMS_break/self.fT)**4) #Displacement noise of the interferometric TM--to-TM 
 
             f_trans = const.c/2/np.pi/self.L #Transfer frequency
-            self._P_n_f = (P_IMS + 2*(1+np.cos(self.fT.value/f_trans.value)**2)*P_acc)/self.L**2
+            self._P_n_f = (P_IMS + 2*(1+np.cos(self.fT.value/f_trans.value)**2)*P_acc)/self.L**2/u.Hz
+        self._P_n_f = make_quant(self._P_n_f,'1/Hz')
         return self._P_n_f
     @P_n_f.deleter
     def P_n_f(self):
@@ -628,6 +629,9 @@ class BlackHoleBinary:
                 self.f_high = value
             elif keys == 'nfreqs':
                 self.nfreqs = value
+            elif keys == 'instrument':
+                self.instrument = value
+                self.checkFreqEvol(self.instrument)
         if not hasattr(self,'nfreqs'):
             self.nfreqs = int(1e3)
         if not hasattr(self,'f_low'):
@@ -685,41 +689,26 @@ class BlackHoleBinary:
         self._inc = self._return_value
 
     @property
+    def instrument(self):
+        return self._instrument
+    @instrument.setter
+    def instrument(self,value):
+        self._instrument = value
+
+    @property
     def h_gw(self):
         if not hasattr(self,'_h_gw'):
-            self.h_gw = 'Averaged'
+            if not hasattr(self,'f_init'):
+                if hasattr(self,'_instrument'):
+                    self.checkFreqEvol(self._instrument)
+                else:
+                    raise ValueError('No instrument assigned, please fix it. '\
+                        'Try: "source.instrument = instrument".')
+            self._h_gw = Get_MonoStrain(self,self.f_init).to('')
         return self._h_gw
     @h_gw.setter
-    def h_gw(self,strain_const):
-        if isinstance(strain_const,str):
-            DL = cosmo.luminosity_distance(self.z)
-            DL = DL.to('m')
-
-            m_conv = const.G/const.c**3 #Converts M = [M] to M = [sec]
-
-            eta = self.q/(1+self.q)**2
-            M_redshifted_time = self.M.to('kg')*(1+self.z)*m_conv
-            M_chirp = eta**(3/5)*M_redshifted_time
-            #Source is emitting at one frequency (monochromatic)
-            #strain of instrument at f_cw
-            if strain_const == 'UseInc':
-                #Strain from Rosado, Sesana, and Gair (2015) https://arxiv.org/abs/1503.04803
-                #inc = 0.0 #optimally oriented
-                a = 1+np.cos(self.inc)**2
-                b = -2*np.cos(self.inc)
-                const_val = 2*np.sqrt(.5*(a**2+b**2))
-            elif strain_const == 'Hazboun':
-                const_val = 4.
-            elif strain_const == 'Averaged':
-                #Strain from Robson et al. 2019 (eqn 27) https://arxiv.org/pdf/1803.01944.pdf
-                #(ie. #(ie. sky and inclination averaged 4 * sqrt(4/5))
-                const_val = 8/np.sqrt(5)
-            else:
-                raise ValueError('Can only use "UseInc" or "Averaged" monochromatic strain calculation.')
-
-            self._h_gw = const_val*(const.c/DL)*(np.pi*self.f_init)**(2./3.)*M_chirp**(5./3.)
-        else:
-            raise ValueError('Can only use "UseInc" or "Averaged" monochromatic strain calculation.')
+    def h_gw(self,value):
+        self._h_gw = value
     @h_gw.deleter
     def h_gw(self):
         del self._h_gw
@@ -774,7 +763,32 @@ class BlackHoleBinary:
 
         [self._phenomD_f,self._phenomD_h] = PhenomD.FunPhenomD(Vars,self._fitcoeffs,self.nfreqs,f_low=self.f_low.value)
 
-    def checkFreqEvol(self,T_obs):
+    def Get_Time_from_Merger(self,f_obs):
+        '''Takes in an initally observed frequency, outputs the binary's time
+            from merger.
+        '''
+        m_conv = const.G/const.c**3 #Converts M = [M] to M = [sec]
+        eta = self.q/(1+self.q)**2
+
+        M_time = self.M.to('kg')*m_conv
+        M_chirp = eta**(3/5)*M_time
+
+        f_obs_source = f_obs*(1+self.z)
+        return 5*(M_chirp)**(-5/3)*(8*np.pi*f_obs_source)**(-8/3)
+
+    def Get_Source_Freq(self,tau):
+        '''Takes in a time from merger (tau) and calculates the binary's
+            GW frequency at that time. Assumes tau is in the source frame
+        '''
+        m_conv = const.G/const.c**3 #Converts M = [M] to M = [sec]
+        eta = self.q/(1+self.q)**2
+
+        M_time = self.M.to('kg')*m_conv
+        M_chirp = eta**(3/5)*M_time
+
+        return 1./8./np.pi/M_chirp*(5*M_chirp/tau)**(3./8.)
+
+    def checkFreqEvol(self,instrument):
         #####################################
         #If the initial observed time from merger is less than the time observed
         #(ie t_init-T_obs < 0 => f_evolve is complex),
@@ -796,7 +810,7 @@ class BlackHoleBinary:
         M_time = self.M.to('kg')*m_conv
         M_chirp_source = eta**(3/5)*M_time
 
-        T_obs = make_quant(T_obs,'s')
+        T_obs = make_quant(instrument.T_obs,'s')
 
         T_obs_source = T_obs/(1+self.z)
         #print('T_obs_source: ',T_obs_source.to('yr'))
@@ -804,21 +818,19 @@ class BlackHoleBinary:
         #Assumes t_init is in source frame, can either be randomly drawn
         #   or set to T_obs
         #t_init_source = np.random.uniform(0,100)*u.yr
-        t_init_source = T_obs_source
+        t_init_source = 4*u.yr
+        t_init_source = make_quant(t_init_source,'s')
 
-        f_init_source = 1./8./np.pi/M_chirp_source*\
-                        (5*M_chirp_source/t_init_source)**(3./8.)
+        f_init_source = self.Get_Source_Freq(t_init_source)
         #print('f_init_source: ',f_init_source)
         
-        self.f_init = f_init_source/(1+self.z)
+        self.f_init = f_init_source#/(1+self.z)
         #print('f_init_inst: ',self.f_init)
         
-        
-        f_T_obs_source = 1./8./np.pi/M_chirp_source*\
-                        (5*M_chirp_source/(t_init_source-T_obs_source))**(3./8.)
+        f_T_obs_source = self.Get_Source_Freq((t_init_source-T_obs_source))
         #print('f_end_source: ',f_T_obs_source)
         
-        self.f_T_obs = f_T_obs_source/(1+self.z)
+        self.f_T_obs = f_T_obs_source#/(1+self.z)
         #print('f_T_obs_inst: ',self.f_T_obs)
         
         delf_obs_source_exact = f_T_obs_source-f_init_source
@@ -830,7 +842,7 @@ class BlackHoleBinary:
         delf_obs_source_approx = 1./8./np.pi/M_chirp_source*(5*M_chirp_source/t_init_source)**(3./8.)*(3*T_obs_source/8/t_init_source)
         #print('delf_Jeff: ',delf_obs_source_approx)
         
-        delf_obs =  delf_obs_source_approx/(1+self.z)
+        delf_obs =  delf_obs_source_approx#/(1+self.z)
 
         '''
         Old way I was doing this....
@@ -1028,6 +1040,41 @@ def Get_CharStrain(source):
         return h_char
     else:
         raise ValueError('You need to get f and h_f first. \n')
+
+def Get_MonoStrain(source,f_gw,strain_const='Averaged'):
+    '''Calculates the strain from a binary in source emitting
+        at a frequency of f_gw.
+    '''
+    f_gw = make_quant(f_gw,'Hz')
+    if isinstance(strain_const,str):
+        DL = cosmo.luminosity_distance(source.z)
+        DL = DL.to('m')
+
+        m_conv = const.G/const.c**3 #Converts M = [M] to M = [sec]
+
+        eta = source.q/(1+source.q)**2
+        M_redshifted_time = source.M.to('kg')*(1+source.z)*m_conv
+        M_chirp = eta**(3/5)*M_redshifted_time
+        #Source is emitting at one frequency (monochromatic)
+        #strain of instrument at f_cw
+        if strain_const == 'UseInc':
+            #Strain from Rosado, Sesana, and Gair (2015) https://arxiv.org/abs/1503.04803
+            #inc = 0.0 #optimally oriented
+            a = 1+np.cos(source.inc)**2
+            b = -2*np.cos(source.inc)
+            const_val = 2*np.sqrt(.5*(a**2+b**2))
+        elif strain_const == 'Hazboun':
+            const_val = 4.
+        elif strain_const == 'Averaged':
+            #Strain from Robson et al. 2019 (eqn 27) https://arxiv.org/pdf/1803.01944.pdf
+            #(ie. #(ie. sky and inclination averaged 4 * sqrt(4/5))
+            const_val = 8/np.sqrt(5)
+        else:
+            raise ValueError('Can only use "UseInc" or "Averaged" monochromatic strain calculation.')
+
+        return const_val*(const.c/DL)*(np.pi*f_gw)**(2./3.)*M_chirp**(5./3.)
+    else:
+        raise ValueError('Can only use "UseInc" or "Averaged" monochromatic strain calculation.')
 
 def make_quant(param, default_unit):
     """
