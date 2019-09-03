@@ -1,21 +1,33 @@
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.colors as colors
-from matplotlib import cm
-import matplotlib.ticker as ticker
-import os, sys
-import struct
-import scipy.integrate as integrate
 
-def FunPhenomD(Vars,fitcoeffs,N,f_low=1e-9,pct_of_peak=0.01):
+def FunPhenomD(source,pct_of_peak=0.01):
     '''
     Uses Mass Ratio (q <= 18), aligned spins (|a/m|~0.85 or when q=1 |a/m|<0.98),
     fitting coefficients for QNM type, and sampling rate
     Returns the frequency, the Phenom amplitude of the inspiral-merger-ringdown
     Uses methods found in arXiv:1508.07253 and arXiv:1508.07250
-    ###############################################
+
+    Parameters
+    ----------
+    source : object
+            source object from StrainandNoise, contains all source parameters
+    pct_of_peak : float, optional
+            the percentange of the strain at merger that dictates the maximum frequency the waveform is calculated at in geometrized units (G=c=1)
+
+    Returns
+    -------
+    Mf : numpy array of floats
+        the waveform frequencies in geometrized units (G=c=1)
+    fullwaveform : numpy array of floats
+        the waveform strain in geometrized units (G=c=1)
     '''
-    [_,q,x1,x2,_] = Vars
+    f_low = source.f_low.value
+    N = source.nfreqs
+    q = source.q
+    x1 = source.chi1
+    x2 = source.chi2
+    fitcoeffs = source._fitcoeffs
+
     #M = m1+m2 #Total Mass
     #q = m2/m1 #Mass Ratio: Paper tested up to 18
     #eta = m1*m2/M**2 

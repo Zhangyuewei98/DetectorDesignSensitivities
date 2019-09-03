@@ -23,29 +23,41 @@ top_directory = "/".join(splt_path[0:top_path_idx+1])
 class PTA:
     '''
     Class to make a PTA instrument using the methods of Hazboun, Romano, Smith 2019
+
+    Parameters
+    ----------
+
+    name : string
+        name of the instrument
+    *args
+        T_obs : float
+            the observation time of the PTA in [years]
+        N_p : int
+            the number of pulsars in the PTA 
+        sigma : float
+            the rms error on the pulsar TOAs in [sec]
+        cadence : float
+            How often the pulsars are observed in [num/year]
+
+    **kwargs
+        load_location : string, optional
+            If you want to load a PTA curve from a file, it's the file path
+        A_GWB : float, optional
+            Amplitude of the gravitational wave background added as red noise
+        alpha_GWB : float, optional
+            the GWB power law, if empty and A_GWB is set, it is assumed to be -2/3
+        A_rn : float, optional
+            Individual pulsar red noise amplitude, is a list of [min,max] values from which to uniformly sample
+        alpha_rn : float, optional
+            Individual pulsar red noise alpha (power law), is a list of [min,max] values from which to uniformly sample
+        f_low : float, optional
+            Assigned lowest frequency of PTA (default assigns 1/(5*T_obs))
+        f_high : float, optional
+            Assigned highest frequency of PTA (default is Nyquist freq cadence/2)
+        nfreqs : int, optional
+            Number of frequencies in logspace the sensitivity is calculated
     '''
     def __init__(self,name,*args,**kwargs):
-        '''
-        name - name of the instrument
-        args in order: 
-        T_obs - the observation time of the PTA in [years]
-        N_p - the number of pulsars in the PTA 
-        sigma - the rms error on the pulsar TOAs in [sec]
-        cadence - How often the pulsars are observed in [num/year]
-
-        kwargs can be:
-        load_location: If you want to load a PTA curve from a file, 
-                        it's the file path
-        A_GWB: Amplitude of the gravitational wave background added as red noise
-        alpha_GWB: the GWB power law, if empty and A_GWB is set, it is assumed to be -2/3
-        A_rn: Individual pulsar red noise amplitude, is a list of [min,max] values from
-                which to uniformly sample
-        alpha_rn: Individual pulsar red noise alpha (power law), is a list of [min,max] values from
-                which to uniformly sample
-        f_low: Assigned lowest frequency of PTA (default assigns 1/(5*T_obs))
-        f_high: Assigned highest frequency of PTA (default is Nyquist freq cadence/2)
-        nfreqs: Number of frequencies in logspace the sensitivity is calculated
-        '''
         self.name = name
         for keys,value in kwargs.items():
             if keys == 'load_location':
@@ -61,9 +73,9 @@ class PTA:
                 self.alpha_rn_min = value[0]
                 self.alpha_rn_max = value[1]
             elif keys == 'f_low':
-                self.f_low = value
+                self.f_low = make_quant(value,'Hz')
             elif keys == 'f_high':
-                self.f_high = value
+                self.f_high = make_quant(value,'Hz')
             elif keys == 'nfreqs':
                 self.nfreqs = value
 
@@ -74,14 +86,13 @@ class PTA:
 
         if len(args) != 0:
             [T_obs,N_p,sigma,cadence] = args
-            self.T_obs = T_obs
+            self.T_obs = make_quant(T_obs,'yr')
             self.N_p = N_p
-            self.sigma = sigma
-            self.cadence = cadence
+            self.sigma = make_quant(sigma,'s')
+            self.cadence = make_quant(cadence,'1/yr')
 
     @property
     def T_obs(self):
-        self._T_obs = make_quant(self._T_obs,'yr')
         return self._T_obs
     @T_obs.setter
     def T_obs(self,value):
@@ -98,7 +109,6 @@ class PTA:
 
     @property
     def cadence(self):
-        self._cadence = make_quant(self._cadence,'1/yr')
         return self._cadence
     @cadence.setter
     def cadence(self,value):
@@ -129,7 +139,6 @@ class PTA:
             T_obs_sec = self.T_obs.to('s').value
             cadence_sec = self.cadence.to('1/s').value
             self._fT = np.logspace(np.log10(1/(5*T_obs_sec)),np.log10(cadence_sec/2),self.nfreqs)
-        self._fT = make_quant(self._fT,'Hz')
         return self._fT
     @fT.setter
     def fT(self,value):
@@ -704,7 +713,7 @@ class BlackHoleBinary:
                 else:
                     raise ValueError('No instrument assigned, please fix it. '\
                         'Try: "source.instrument = instrument".')
-            self._h_gw = Get_MonoStrain(self,self.f_init).to('')
+            self._h_gw = Get_MonoStrain(self,self.instrument.f_opt).to('')
         return self._h_gw
     @h_gw.setter
     def h_gw(self,value):
@@ -758,10 +767,7 @@ class BlackHoleBinary:
     def Get_PhenomD_Strain(self):
         if not hasattr(self,'_fitcoeffs'):
             self.Get_fitcoeffs()
-
-        Vars = [self.M.value,self.q,self.chi1,self.chi2,self.z]
-
-        [self._phenomD_f,self._phenomD_h] = PhenomD.FunPhenomD(Vars,self._fitcoeffs,self.nfreqs,f_low=self.f_low.value)
+        [self._phenomD_f,self._phenomD_h] = PhenomD.FunPhenomD(self)
 
     def Get_Time_from_Merger(self,f_obs):
         '''Takes in an initally observed frequency, outputs the binary's time
