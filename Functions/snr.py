@@ -160,9 +160,13 @@ def Calc_Chirp_SNR(source,instrument):
     # over the overlapping region. See eqn 18 from Robson,Cornish,and Liu 2018 https://arxiv.org/abs/1803.01944
     # Values outside of the sensitivity curve are arbitrarily set to 1e30 so the SNR is effectively 0
 
-    #Only want to integrate from observed frequency (f(T_obs_before_merger)) till merger
-    indxfgw_start = np.abs(source.f-source.f_init).argmin()
+    #Use to integrate from initial observed frequency f(t_init) to f(t_init-T_obs)
+    #   Does not work unless t_init is randomly sampled, which we don't do 
+    #indxfgw_start = np.abs(source.f-source.f_init).argmin()
     #indxfgw_end = np.abs(source.f-source.f_T_obs).argmin()
+
+    #Only want to integrate from observed frequency (f(T_obs_before_merger)) till merger
+    indxfgw_start = np.abs(source.f-source.f_T_obs).argmin()
     indxfgw_end = len(source.f)
     if indxfgw_start >= len(source.f)-1:
         #If the SMBH has already merged set the SNR to ~0

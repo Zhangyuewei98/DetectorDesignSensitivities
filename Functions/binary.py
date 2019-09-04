@@ -109,7 +109,7 @@ class BBHFrequencyDomain(BinaryBlackHole):
                 self.nfreqs = value
             elif keys == 'instrument':
                 self.instrument = value
-                self.checkFreqEvol()
+                self.Check_Freq_Evol()
         if not hasattr(self,'nfreqs'):
             self.nfreqs = int(1e3)
         if not hasattr(self,'f_low'):
@@ -153,12 +153,17 @@ class BBHFrequencyDomain(BinaryBlackHole):
         if not hasattr(self,'_h_gw'):
             if not hasattr(self,'f_init'):
                 if hasattr(self,'_instrument'):
-                    self.checkFreqEvol()
+                    self.Check_Freq_Evol()
                 else:
                     raise ValueError('No instrument assigned, please fix it. '\
                         'Try: "source.instrument = instrument".')
-            self._h_gw = Get_Mono_Strain(self,self.instrument.f_opt).to('')
+                self._h_gw = Get_Mono_Strain(self,self.instrument.f_opt).to('')
+            else:
+                self._h_gw = Get_Mono_Strain(self,self.f_init).to('')
         return self._h_gw
+    @h_gw.setter
+    def h_gw(self,value):
+        self._h_gw = value
     @h_gw.deleter
     def h_gw(self):
         del self._h_gw
@@ -252,7 +257,13 @@ class BBHFrequencyDomain(BinaryBlackHole):
         t_init_source = np.random.uniform(0,100)*u.yr
         '''
         #Assumes f_init is the optimal frequency in the instrument frame to get t_init_source
-        t_init_source = self.Get_Time_From_Merger(self.instrument.f_opt)
+        self.f_init = self.instrument.f_opt
+        t_init_source = self.Get_Time_From_Merger(self.f_init)
+
+        #f(T_obs), the frequency of the source at T_obs before merger
+        f_T_obs_source = self.Get_Source_Freq(T_obs_source)
+        #f(T_obs) in the instrument frame
+        self.f_T_obs = f_T_obs_source/(1+self.z)
 
         #t_init_source = make_quant(t_init_source,'s')
         #print('t_init_source: ',t_init_source.to('yr'))
@@ -263,13 +274,13 @@ class BBHFrequencyDomain(BinaryBlackHole):
         #self.f_init = f_init_source/(1+self.z)
         #print('f_init_inst: ',self.f_init)
         
-        #f_T_obs_source = self.Get_Source_Freq((t_init_source-T_obs_source))
-        #print('f_end_source: ',f_T_obs_source)
+        #f_after_T_obs_source = self.Get_Source_Freq((t_init_source-T_obs_source))
+        #print('f_end_source: ',f_after_T_obs_source)
         
-        #self.f_T_obs = f_T_obs_source/(1+self.z)
+        #self.f_T_obs = f_after_T_obs_source/(1+self.z)
         #print('f_T_obs_inst: ',self.f_T_obs)
         
-        #delf_obs_source_exact = f_T_obs_source-f_init_source
+        #delf_obs_source_exact = f_after_T_obs_source-f_init_source
         #print('delf_source: ',delf_obs_source_exact)
         
         #from eqn 41 from Hazboun,Romano, and Smith (2019) https://arxiv.org/abs/1907.04341
@@ -290,6 +301,7 @@ class BBHFrequencyDomain(BinaryBlackHole):
         #f(t) from eqn 40
         f_evolve = 1./8./np.pi/M_chirp*(5*M_chirp/(t_init-T_obs))**(3./8.)
         f_T_obs = 1./8./np.pi/M_chirp*(5*M_chirp/T_obs)**(3./8.)
+        print(f_T_obs)
         #from eqn 41 from Hazboun,Romano, and Smith (2019) https://arxiv.org/abs/1907.04341
         delf = 1./8./np.pi/M_chirp*(5*M_chirp/t_init)**(3./8.)*(3*T_obs/8/t_init)
         print('delf old: ',delf)
@@ -299,7 +311,6 @@ class BBHFrequencyDomain(BinaryBlackHole):
         if delf_obs < (1/T_obs):
             self.ismono = True
         else:
-            self.f_init = self.Get_Source_Freq(T_obs)
             self.ismono = False
 
     
@@ -408,6 +419,8 @@ class BBHTimeDomain(BinaryBlackHole):
         #Combine them for raw spectral power
         natural_h_f = np.sqrt((np.abs(h_cross_f))**2 + (np.abs(h_plus_f))**2)
         return [natural_f,natural_h_f]
+
+
 
 def Strain_Conv(source,natural_f,natural_h):
     DL = cosmo.luminosity_distance(source.z)
