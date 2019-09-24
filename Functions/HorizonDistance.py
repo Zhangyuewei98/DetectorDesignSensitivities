@@ -1,5 +1,3 @@
-import os, time, sys, struct
-
 import numpy as np
 
 import matplotlib.pyplot as plt
@@ -16,9 +14,8 @@ import astropy.units as u
 from astropy.cosmology import z_at_value
 from astropy.cosmology import WMAP9 as cosmo
 
-from fractions import Fraction
-
-import StrainandNoise_v4 as SnN
+from gwent.utils import make_quant
+from gwent import detector
 
 def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh,redshift_array=None):
     '''Setting Up Horizon Distance calculation
@@ -29,9 +26,7 @@ def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh,redshift_
             iteratively converge to correct luminosity distance values.
         Returns the variable ranges used to calculate the horizon distance for each matrix and the horizon distance
     '''
-
-    if not hasattr(source,'instrument'):
-        source.instrument = instrument
+    source.instrument = instrument
     #Get Samples for variable
     [sample_x,recalculate_strain,recalculate_noise] = Get_Samples(source,instrument,var_x,sampleRate_x)
 
@@ -113,15 +108,9 @@ def Get_Samples(source,instrument,var_x,sampleRate_x):
             recalculate_strain = True #Must recalculate the waveform at each point
         elif var_x == 'T_obs':
             #sample in linear space for instrument variables
-            #Need exception for astropy variables
-            if isinstance(var_x_dict['min'],u.Quantity) and isinstance(var_x_dict['max'],u.Quantity):
-                T_obs_min = var_x_dict['min'].to('s')
-                T_obs_max = var_x_dict['max'].to('s')
-                sample_x = np.linspace(T_obs_min.value,T_obs_max.value,sampleRate_x)
-            else:
-                T_obs_min = var_x_dict['min']*u.yr.to('s')
-                T_obs_max = var_x_dict['max']*u.yr.to('s')
-                sample_x = np.linspace(T_obs_min,T_obs_max,sampleRate_x)
+            T_obs_min = make_quant(var_x_dict['min'],'s')
+            T_obs_max = make_quant(var_x_dict['max'],'s')
+            sample_x = np.linspace(T_obs_min.value,T_obs_max.value,sample_rate_x)
         else:
             #Sample in log space for any other variables
             #Need exception for astropy variables
@@ -129,21 +118,10 @@ def Get_Samples(source,instrument,var_x,sampleRate_x):
                 sample_x = np.logspace(np.log10(var_x_dict['min'].value),np.log10(var_x_dict['max'].value),sampleRate_x)
             else:
                 sample_x = np.logspace(np.log10(var_x_dict['min']),np.log10(var_x_dict['max']),sampleRate_x)
-    
-    '''Since I am using astropy units, I need to update units on the selected samples'''
-    #Handle x variables
-    if var_x == 'L' or var_x == 'A_IMS':
-        sample_x = sample_x*u.m
-    elif var_x == 'T_obs' or var_x == 'sigma':
-        sample_x = sample_x*u.s
-    elif var_x == 'A_acc':
-        sample_x = sample_x*u.m/u.s/u.s
-    elif var_x == 'f_acc_break_high' or var_x == 'f_acc_break_low' or var_x == 'cadence':
-        sample_x = sample_x/u.s
 
     return sample_x,recalculate_strain,recalculate_noise
 
-def calcMonoHD(source,instrument,rho_thresh):
+def Calc_Mono_HD(source,instrument,rho_thresh):
     ''' Calculates the Horizon Distance for a monochromatic source at an SNR of rho_thresh'''
 
     m_conv = const.G/const.c**3 #Converts M = [M] to M = [sec]
@@ -153,9 +131,9 @@ def calcMonoHD(source,instrument,rho_thresh):
     M_chirp = eta**(3/5)*M_redshifted_time
     #Source is emitting at one frequency (monochromatic)
     #strain of instrument at f_cw
-    if isinstance(instrument,SnN.PTA):
+    if isinstance(instrument,detector.PTA):
         const_val = 4.
-    elif isinstance(instrument,SnN.SpaceBased) or isinstance(instrument,SnN.GroundBased):
+    elif isinstance(instrument,detector.SpaceBased) or isinstance(instrument,detector.GroundBased):
         const_val = 8./np.sqrt(5)
 
     numer = const_val*np.sqrt(source.T_obs)*const.c*(np.pi*source.f_init)**(2./3.)*M_chirp**(5./3.)
@@ -168,7 +146,7 @@ def calcMonoHD(source,instrument,rho_thresh):
 
     return DL.value
 
-def calcChirpHD(source,instrument,rho_thresh):
+def Calc_Chirp_HD(source,instrument,rho_thresh):
     '''Calculates the Horizon Distance for an evolving source using non-precessing binary black hole waveform model IMRPhenomD
                 See Husa et al. 2016 (https://arxiv.org/abs/1508.07250) and Khan et al. 2016 (https://arxiv.org/abs/1508.07253)
                 Uses an interpolated method to align waveform and instrument noise, then integrates 
@@ -180,9 +158,8 @@ def calcChirpHD(source,instrument,rho_thresh):
     m_conv = const.G/const.c**3 #Converts M = [M] to M = [sec]
     M_redshifted_time = source.M.to('kg')*(1+source.z)*m_conv
 
-    #Only want to integrate from observed frequency (f(T_obs_before_merger)) till merger
-    indxfgw_start = np.abs(source.f-source.f_init).argmin()
-    indxfgw_end = np.abs(source.f-source.f_T_obs).argmin()
+    indxfgw_start = np.abs(source.f-source.f_T_obs).argmin()
+    indxfgw_end = len(source.f)
     
     if indxfgw_end >= len(source.f)-1:
         #If the SMBH has already merged set the SNR to ~0
@@ -200,9 +177,9 @@ def calcChirpHD(source,instrument,rho_thresh):
     S_n_f_interp_new = S_n_f_interp_old(np.log10(f_cut.value))
     S_n_f_interp = 10**S_n_f_interp_new
 
-    if isinstance(instrument,SnN.PTA):
+    if isinstance(instrument,detector.PTA):
         integral_consts = 4.*1.5
-    elif isinstance(instrument,SnN.SpaceBased) or isinstance(instrument,SnN.GroundBased):
+    elif isinstance(instrument,detector.SpaceBased) or isinstance(instrument,detector.GroundBased):
         integral_consts = 16./5.
 
     integral_consts *= (const.c**2)/4./np.pi*M_redshifted_time**4/rho_thresh**2
