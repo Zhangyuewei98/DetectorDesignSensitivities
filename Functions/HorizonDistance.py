@@ -17,7 +17,7 @@ from astropy.cosmology import WMAP9 as cosmo
 from gwent.utils import make_quant
 from gwent import detector
 
-def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh,redshift_array=None):
+def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh,redshift_array):
     '''Setting Up Horizon Distance calculation
         Uses the variable given and the data range to sample the space either logrithmically or linearly based on the 
         selection of variables. 
@@ -31,8 +31,6 @@ def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh,redshift_
     [sample_x,recalculate_strain,recalculate_noise] = Get_Samples(source,instrument,var_x,sampleRate_x)
 
     sampleSize_x = len(sample_x)
-    if not isinstance(redshift_array,np.ndarray):
-        redshift_array = np.ones(sampleSize_x)*source.z
     DL_array = np.zeros(sampleSize_x)
     
     for i in range(sampleSize_x):
@@ -45,11 +43,8 @@ def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh,redshift_
                 del instrument.fT
             if hasattr(instrument,'P_n_f'):
                 del instrument.P_n_f
-            if hasattr(instrument,'S_n_f'):
-                del instrument.S_n_f
-            if hasattr(instrument,'h_n_f'):
-                del instrument.h_n_f
-            source.instrument = instrument
+            if isinstance(instrument,detector.PTA) and hasattr(instrument,'_sensitivitycurve'):
+                del instrument._sensitivitycurve
         else:
             #Update Attribute (also updates dictionary)
             setattr(source,var_x,sample_x[i])
@@ -57,10 +52,10 @@ def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh,redshift_
         #Update particular source's redshift
         setattr(source,'z',redshift_array[i])
 
-        source.checkFreqEvol()
+        source.Check_Freq_Evol()
         print(source.ismono)
         if source.ismono: #Monochromatic Source and not diff EOB SNR
-            DL_array[i] = calcMonoHD(source,instrument,rho_thresh)
+            DL_array[i] = Calc_Mono_HD(source,instrument,rho_thresh)
         else: #Chirping Source
             if recalculate_strain == True: #If we need to calculate the waveform everytime
                 #Delete old PhenomD waveform
@@ -70,13 +65,14 @@ def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh,redshift_
                     del source._phenomD_h
             if hasattr(source,'f'):
                 del source.f
-            DL_array[i] = calcChirpHD(source,instrument,rho_thresh)
+            DL_array[i] = Calc_Chirp_HD(source,instrument,rho_thresh)
 
     DL_array = DL_array*u.m.to('Mpc')*u.Mpc
 
     new_redshift_array = np.zeros(np.shape(DL_array))
     for i,DL in enumerate(DL_array):
         if np.log10(DL.value) < -3:
+            print('Smol DL')
             new_redshift_array[i] = 1e-5
         else:
             new_redshift_array[i] = z_at_value(cosmo.luminosity_distance,DL)
@@ -127,7 +123,7 @@ def Calc_Mono_HD(source,instrument,rho_thresh):
     m_conv = const.G/const.c**3 #Converts M = [M] to M = [sec]
 
     eta = source.q/(1+source.q)**2
-    M_redshifted_time = self.M.to('kg')*(1+self.z)*m_conv
+    M_redshifted_time = source.M.to('kg')*(1+source.z)*m_conv
     M_chirp = eta**(3/5)*M_redshifted_time
     #Source is emitting at one frequency (monochromatic)
     #strain of instrument at f_cw
@@ -136,9 +132,9 @@ def Calc_Mono_HD(source,instrument,rho_thresh):
     elif isinstance(instrument,detector.SpaceBased) or isinstance(instrument,detector.GroundBased):
         const_val = 8./np.sqrt(5)
 
-    numer = const_val*np.sqrt(source.T_obs)*const.c*(np.pi*source.f_init)**(2./3.)*M_chirp**(5./3.)
+    numer = const_val*np.sqrt(instrument.T_obs)*const.c*(np.pi*instrument.f_opt)**(2./3.)*M_chirp**(5./3.)
 
-    indxfgw = np.abs(instrument.fT-source.f_init).argmin()
+    indxfgw = np.abs(instrument.fT-instrument.f_opt).argmin()
 
     denom = rho_thresh*np.sqrt(instrument.S_n_f[indxfgw])
 
@@ -161,7 +157,7 @@ def Calc_Chirp_HD(source,instrument,rho_thresh):
     indxfgw_start = np.abs(source.f-source.f_T_obs).argmin()
     indxfgw_end = len(source.f)
     
-    if indxfgw_end >= len(source.f)-1:
+    if indxfgw_start >= len(source.f)-1:
         #If the SMBH has already merged set the SNR to ~0
         print('TOO LOW')
         return 1e-30  
@@ -264,7 +260,8 @@ def plotHD(source,instrument,var_x,sample_x,DL_array,display=True,figloc=None):
 
 
     dists_min = -2
-    dists_max = np.max(np.ceil(np.log10(DL_array)))
+    dists_max = np.nanmax(np.ceil(np.log10(DL_array)))
+    print('dist max: ',np.ceil(np.log10(DL_array)))
     dists = np.arange(dists_min,dists_max+1)
     plt.ylim([10**dists_min,10**dists_max])
     plt.yticks(10**dists,[r'$10^{%i}$' %dist if np.abs(int(dist)) > 1 else '{:g}'.format(10**dist) for dist in dists],fontsize = axissize)
