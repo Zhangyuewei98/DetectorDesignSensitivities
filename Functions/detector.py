@@ -1,5 +1,5 @@
 import numpy as np
-import os
+import os,sys
 import astropy.constants as const
 import astropy.units as u
 import scipy.interpolate as interp
@@ -7,13 +7,19 @@ from astropy.cosmology import z_at_value
 from astropy.cosmology import WMAP9 as cosmo
 
 import gwent
-from . import utils
+
+current_path = os.getcwd()
+splt_path = current_path.split("/")
+top_path_idx = splt_path.index('DetectorDesignSensitivities')
+top_directory = "/".join(splt_path[0:top_path_idx+1])
+
+sys.path.insert(0,top_directory + '/Functions')
+import utils
 
 import hasasia.sensitivity as hassens
 import hasasia.sim as hassim
 
-current_path = os.path.abspath(gwent.__path__[0])
-load_directory = os.path.join(current_path,'LoadFiles/')
+load_directory = os.path.join(gwent.__path__[0],'LoadFiles/')
 
 class PTA:
     """

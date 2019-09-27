@@ -1,5 +1,5 @@
 import numpy as np
-import os
+import os,sys
 import astropy.constants as const
 import astropy.units as u
 import scipy.interpolate as interp
@@ -7,11 +7,17 @@ from astropy.cosmology import z_at_value
 from astropy.cosmology import WMAP9 as cosmo
 
 import gwent
-from .waveform import Get_Waveform
-from . import utils
 
-current_path = os.path.abspath(gwent.__path__[0])
-load_directory = os.path.join(current_path,'LoadFiles/')
+current_path = os.getcwd()
+splt_path = current_path.split("/")
+top_path_idx = splt_path.index('DetectorDesignSensitivities')
+top_directory = "/".join(splt_path[0:top_path_idx+1])
+
+sys.path.insert(0,top_directory + '/Functions')
+from waveform import Get_Waveform
+import utils
+
+load_directory = os.path.join(gwent.__path__[0],'LoadFiles/')
 
 class BinaryBlackHole:
     """Base Class for frequency domain strains from Binary Black Holes.
@@ -289,6 +295,7 @@ class BBHFrequencyDomain(BinaryBlackHole):
 
         T_obs = utils.make_quant(self.instrument.T_obs,'s')
         T_obs_source = T_obs/(1+self.z)
+        #print('T_obs_source: ',T_obs_source.to('yr'))
 
 
         #Assumes t_init is in source frame, can either be randomly drawn
@@ -296,7 +303,9 @@ class BBHFrequencyDomain(BinaryBlackHole):
 
         #Assumes f_init is the optimal frequency in the instrument frame to get t_init_source
         self.f_init = self.instrument.f_opt
+        #print('f_init: ',self.f_init)
         t_init_source = self.Get_Time_From_Merger(self.f_init)
+        #print('t_init_source: ',t_init_source.to('yr'))
 
         #f(T_obs), the frequency of the source at T_obs before merger
         f_T_obs_source = self.Get_Source_Freq(T_obs_source)
@@ -306,12 +315,32 @@ class BBHFrequencyDomain(BinaryBlackHole):
         #t_init_source = make_quant(t_init_source,'s')
         #f_init_source = self.Get_Source_Freq(t_init_source)
         #self.f_init = f_init_source/(1+self.z)
+        #print('t_diff: ', (t_init_source-T_obs_source).to('yr'))
         #f_after_T_obs_source = self.Get_Source_Freq((t_init_source-T_obs_source))
+        #print('f_after_T_obs_source: ',f_after_T_obs_source)
         #self.f_T_obs = f_after_T_obs_source/(1+self.z)
-        #delf_obs_source_exact = f_after_T_obs_source-f_init_source
+        #delf_obs_source_exact = f_after_T_obs_source-self.f_init
+        #print('delf_obs_source_exact: ',delf_obs_source_exact)
+        #print('delf_obs_exact: ',delf_obs_source_exact/(1+self.z))
 
         delf_obs_source_approx = 1./8./np.pi/M_chirp_source*(5*M_chirp_source/t_init_source)**(3./8.)*(3*T_obs_source/8/t_init_source)
         delf_obs =  delf_obs_source_approx/(1+self.z)
+
+        #print('delf_obs: ',delf_obs)
+        #print('1/T_obs: ',(1/T_obs))
+
+        #Old way I was doing this....
+        #M_redshifted_time = self.M.to('kg')*(1+self.z)*m_conv
+        #M_chirp = eta**(3/5)*M_redshifted_time
+        #t_init = 5*(M_chirp)**(-5/3)*(8*np.pi*self.instrument.f_opt)**(-8/3)
+        #print('t_init: ', t_init.to('yr'))
+        #f(t) from eqn 40
+        #f_evolve = 1./8./np.pi/M_chirp*(5*M_chirp/(t_init-T_obs))**(3./8.)
+        #f_T_obs = 1./8./np.pi/M_chirp*(5*M_chirp/T_obs)**(3./8.)
+        #from eqn 41 from Hazboun,Romano, and Smith (2019) https://arxiv.org/abs/1907.04341
+        #delf = 1./8./np.pi/M_chirp*(5*M_chirp/t_init)**(3./8.)*(3*T_obs/8/t_init)
+        #print('delf old: ',delf)
+        #print('')
 
         if delf_obs < (1/T_obs):
             self.ismono = True

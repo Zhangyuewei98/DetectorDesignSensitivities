@@ -4,9 +4,16 @@ import scipy.integrate as integrate
 
 import astropy.units as u
 
-from . import detector
-from . import binary
-from .utils import make_quant
+import os,sys
+current_path = os.getcwd()
+splt_path = current_path.split("/")
+top_path_idx = splt_path.index('DetectorDesignSensitivities')
+top_directory = "/".join(splt_path[0:top_path_idx+1])
+
+sys.path.insert(0,top_directory + '/Functions')
+import detector
+import binary
+from utils import make_quant
 
 
 def Get_SNR_Matrix(source,instrument,var_x,sample_rate_x,var_y,sample_rate_y):
