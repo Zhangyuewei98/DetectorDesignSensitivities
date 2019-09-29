@@ -15,9 +15,9 @@ from astropy.cosmology import z_at_value
 from astropy.cosmology import WMAP9 as cosmo
 
 from gwent.utils import make_quant
-from gwent import detector
+from gwent import detector,snr
 
-def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh,redshift_array):
+def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh):
     '''Setting Up Horizon Distance calculation
         Uses the variable given and the data range to sample the space either logrithmically or linearly based on the 
         selection of variables. 
@@ -26,15 +26,17 @@ def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh,redshift_
             iteratively converge to correct luminosity distance values.
         Returns the variable ranges used to calculate the horizon distance for each matrix and the horizon distance
     '''
+    redshift_array = np.logspace(-2,3,100)
+
     source.instrument = instrument
     #Get Samples for variable
     [sample_x,recalculate_strain,recalculate_noise] = Get_Samples(source,instrument,var_x,sampleRate_x)
 
     sampleSize_x = len(sample_x)
-    DL_array = np.zeros(sampleSize_x)
+    new_redshift_array = np.zeros(sampleSize_x)
+    rho_z = np.zeros(len(redshift_array))
     
     for i in range(sampleSize_x):
-
         if recalculate_noise == True:
             #Update Attribute (also updates dictionary)
             setattr(instrument,var_x,sample_x[i])
@@ -49,33 +51,55 @@ def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh,redshift_
             #Update Attribute (also updates dictionary)
             setattr(source,var_x,sample_x[i])
 
-        #Update particular source's redshift
-        setattr(source,'z',redshift_array[i])
+        error_number = 1.0
+        for j,z in enumerate(redshift_array):
+            #Update particular source's redshift
+            setattr(source,'z',z)
 
-        source.Check_Freq_Evol()
-        print(source.ismono)
-        if source.ismono: #Monochromatic Source and not diff EOB SNR
-            DL_array[i] = Calc_Mono_HD(source,instrument,rho_thresh)
-        else: #Chirping Source
-            if recalculate_strain == True: #If we need to calculate the waveform everytime
-                #Delete old PhenomD waveform
-                if hasattr(source,'_phenomD_f'):
-                    del source._phenomD_f
-                if hasattr(source,'_phenomD_h'):
-                    del source._phenomD_h
-            if hasattr(source,'f'):
-                del source.f
-            DL_array[i] = Calc_Chirp_HD(source,instrument,rho_thresh)
+            source.Check_Freq_Evol()
+            if source.ismono: #Monochromatic Source
+                if hasattr(source,'h_gw'):
+                    del source.h_gw
+                rho_z[j] = snr.Calc_Mono_SNR(source,instrument)
+            else: #Chirping Source
+                if recalculate_strain == True: #If we need to calculate the waveform everytime
+                    #Delete old PhenomD waveform
+                    if hasattr(source,'_phenomD_f'):
+                        del source._phenomD_f
+                    if hasattr(source,'_phenomD_h'):
+                        del source._phenomD_h
+                if hasattr(source,'f'):
+                    del source.f
+                if hasattr(source,'h_f'):
+                    del source.h_f
+                rho_z[j] = snr.Calc_Chirp_SNR(source,instrument)
+            if rho_z[j] < 1.0:
+                rho_z[j] = error_number
+                error_number -= .01
 
-    DL_array = DL_array*u.m.to('Mpc')*u.Mpc
-
-    new_redshift_array = np.zeros(np.shape(DL_array))
-    for i,DL in enumerate(DL_array):
-        if np.log10(DL.value) < -3:
-            print('Smol DL')
-            new_redshift_array[i] = 1e-5
+        rho_interp = interp.InterpolatedUnivariateSpline(redshift_array,rho_z-rho_thresh)
+        z_val = rho_interp.roots()
+        if len(z_val) == 0:
+            if min(rho_z) > rho_thresh:
+                new_redshift_array[i] = 1e4
+            else:
+                new_redshift_array[i] = 1e-10 
+        elif len(z_val) == 2:
+            print('Multiple roots ','Mass: ',source.M,' z_vals: ',z_val)
+            print('Taking the largest redshift.')
+            new_redshift_array[i] = max(z_val)
         else:
-            new_redshift_array[i] = z_at_value(cosmo.luminosity_distance,DL)
+            new_redshift_array[i] = z_val[0]
+        """
+        plt.figure()
+        plt.plot(redshift_array,rho_z)
+        plt.axhline(y=rho_thresh)
+        plt.axvline(new_redshift_array[i])
+        plt.yscale('log')
+        plt.xscale('log')
+        plt.show()
+        """
+    DL_array = cosmo.luminosity_distance(new_redshift_array)
 
     return [sample_x,DL_array,new_redshift_array]
 
@@ -117,86 +141,8 @@ def Get_Samples(source,instrument,var_x,sampleRate_x):
 
     return sample_x,recalculate_strain,recalculate_noise
 
-def Calc_Mono_HD(source,instrument,rho_thresh):
-    ''' Calculates the Horizon Distance for a monochromatic source at an SNR of rho_thresh'''
 
-    m_conv = const.G/const.c**3 #Converts M = [M] to M = [sec]
-
-    eta = source.q/(1+source.q)**2
-    M_redshifted_time = source.M.to('kg')*(1+source.z)*m_conv
-    M_chirp = eta**(3/5)*M_redshifted_time
-    #Source is emitting at one frequency (monochromatic)
-    #strain of instrument at f_cw
-    if isinstance(instrument,detector.PTA):
-        const_val = 4.
-    elif isinstance(instrument,detector.SpaceBased) or isinstance(instrument,detector.GroundBased):
-        const_val = 8./np.sqrt(5)
-
-    numer = const_val*np.sqrt(instrument.T_obs)*const.c*(np.pi*instrument.f_opt)**(2./3.)*M_chirp**(5./3.)
-
-    indxfgw = np.abs(instrument.fT-instrument.f_opt).argmin()
-
-    denom = rho_thresh*np.sqrt(instrument.S_n_f[indxfgw])
-
-    DL = numer/denom
-
-    return DL.value
-
-def Calc_Chirp_HD(source,instrument,rho_thresh):
-    '''Calculates the Horizon Distance for an evolving source using non-precessing binary black hole waveform model IMRPhenomD
-                See Husa et al. 2016 (https://arxiv.org/abs/1508.07250) and Khan et al. 2016 (https://arxiv.org/abs/1508.07253)
-                Uses an interpolated method to align waveform and instrument noise, then integrates 
-                over the overlapping region. See eqn 18 from Robson,Cornish,and Liu 2018 https://arxiv.org/abs/1803.01944
-                Values outside of the sensitivity curve are arbitrarily set to 1e30 so the SNR is effectively 0
-                Uses a constant SNR of rho_thresh
-    '''
-
-    m_conv = const.G/const.c**3 #Converts M = [M] to M = [sec]
-    M_redshifted_time = source.M.to('kg')*(1+source.z)*m_conv
-
-    indxfgw_start = np.abs(source.f-source.f_T_obs).argmin()
-    indxfgw_end = len(source.f)
-    
-    if indxfgw_start >= len(source.f)-1:
-        #If the SMBH has already merged set the SNR to ~0
-        print('TOO LOW')
-        return 1e-30  
-    else:
-        f_cut = source.f[indxfgw_start:indxfgw_end]
-        nat_h_cut = source._phenomD_h[indxfgw_start:indxfgw_end]
-
-    #################################
-    #Interpolate the Strain Noise Spectral Density to only the frequencies the
-    #strain runs over
-    #Set Noise to 1e30 outside of signal frequencies
-    S_n_f_interp_old = interp.interp1d(np.log10(instrument.fT.value),np.log10(instrument.S_n_f.value),kind='cubic',fill_value=30.0, bounds_error=False) 
-    S_n_f_interp_new = S_n_f_interp_old(np.log10(f_cut.value))
-    S_n_f_interp = 10**S_n_f_interp_new
-
-    if isinstance(instrument,detector.PTA):
-        integral_consts = 4.*1.5
-    elif isinstance(instrument,detector.SpaceBased) or isinstance(instrument,detector.GroundBased):
-        integral_consts = 16./5.
-
-    integral_consts *= (const.c**2)/4./np.pi*M_redshifted_time**4/rho_thresh**2
-    integral_consts = integral_consts.value
-
-    #CALCULATE SNR FOR BOTH NOISE CURVES
-    denom = S_n_f_interp #Sky Averaged Noise Spectral Density
-    numer = nat_h_cut**2
-
-    integrand = numer/denom
-    if isinstance(integrand,u.Quantity) and isinstance(f_cut,u.Quantity):
-        DLsqrd = integral_consts*np.trapz(integrand.value,f_cut.value,axis=0) #DL**2
-    elif not isinstance(integrand,u.Quantity) and isinstance(f_cut,u.Quantity):
-        DLsqrd = integral_consts*np.trapz(integrand,f_cut.value,axis=0) #DL**2
-    else:
-        DLsqrd = integral_consts*np.trapz(integrand,f_cut,axis=0) #DL**2
-
-    return np.sqrt(DLsqrd)
-
-
-def plotHD(source,instrument,var_x,sample_x,DL_array,display=True,figloc=None):
+def plotHD(source,instrument,var_x,sample_x,DL_array,display=True,figloc=None,z_axis=False):
     '''Plots the DL curves from calcHorizonDistance'''
 
     axissize = 16
@@ -221,51 +167,75 @@ def plotHD(source,instrument,var_x,sample_x,DL_array,display=True,figloc=None):
 
     #########################
     #Make the Contour Plots
-    plt.figure(figsize=figsize)
+    fig, ax1 = plt.subplots(figsize=figsize)
+    #Set other side y-axis for lookback time scalings
+    ax2 = ax1.twinx()
 
     #Set axis scales based on what data sampling we used 
     if xaxis_type == 'log':
         x_label_min = np.min(np.floor(np.log10(sample_x)))
         x_label_max = np.max(np.ceil(np.log10(sample_x)))
-        plt.loglog(sample_x,DL_array)
-        plt.xlim([10**x_label_min,10**x_label_max])
+        ax1.loglog(sample_x,DL_array,color='b')
+        ax2.loglog(sample_x,DL_array,color='b')
+        ax1.set_xlim([10**x_label_min,10**x_label_max])
         x_labels = np.arange(x_label_min,x_label_max+1)
     elif xaxis_type == 'lin':
         x_label_min = np.min(np.floor(sample_x))
         x_label_max = np.max(np.ceil(sample_x))
-        plt.semilogy(sample_x,DL_array)
-        plt.xlim([x_label_min,x_label_max])
+        ax1.semilogy(sample_x,DL_array,color='b')
+        ax2.semilogy(sample_x,DL_array,color='b')
+        ax1.set_xlim([x_label_min,x_label_max])
         x_labels = np.linspace(x_label_min,x_label_max,x_label_max-x_label_min+1)
 
     #Set axes labels and whether log or linearly spaced
     if var_x == 'M':
-        plt.xlabel(r'$M_{\rm tot}$ $[M_{\odot}]$',fontsize = labelsize)
-        plt.xticks(10**x_labels,[r'$10^{%i}$' %x if int(x) > 1 else r'$%i$' %(10**x) for x in x_labels],fontsize = axissize)
+        ax1.set_xlabel(r'$M_{\rm tot}$ $[M_{\odot}]$',fontsize = labelsize)
+        ax1.set_xticks(10**x_labels)
+        ax1.set_xticklabels([r'$10^{%i}$' %x if int(x) > 1 else r'$%i$' %(10**x) for x in x_labels],fontsize = axissize)
     elif var_x == 'q':
-        plt.xlabel(r'$q$',fontsize = labelsize)
-        plt.xticks(x_labels,fontsize = axissize,rotation=45)
+        ax1.set_xlabel(r'$q$',fontsize = labelsize)
+        ax1.set_xticks(x_labels)
+        ax1.set_xticklabels(fontsize = axissize,rotation=45)
     elif var_x == 'chi1' or var_x == 'chi2':
         x_labels = np.arange(round(x_label_min*10),round(x_label_max*10)+1,1)/10
-        plt.xticks(x_labels)
-        plt.xlabel(r'${\rm Spin}$',fontsize = labelsize)
-        plt.xticks(10**x_labels,fontsize = axissize,rotation=45)
+        ax1.set_xticks(x_labels)
+        ax1.set_xlabel(r'${\rm Spin}$',fontsize = labelsize)
+        ax1.set_xticklabels(10**x_labels,fontsize = axissize,rotation=45)
         plt.legend(loc='lower right')
     elif var_x == 'L':
-        plt.axvline(x=np.log10(2.5*u.Gm.to('m')),linestyle='--',color='k',label='Proposed arm length')
-        plt.xlabel(r'${\rm Armlength}$ $[m]$',fontsize = labelsize)
-        plt.xticks(10**x_labels,[r'$10^{%i}$' %x if int(x) > 1 else r'$%i$' %(10**x) for x in x_labels],fontsize = axissize)
+        ax1.axvline(x=np.log10(2.5*u.Gm.to('m')),linestyle='--',color='k',label='Proposed arm length')
+        ax1.set_xlabel(r'${\rm Armlength}$ $[m]$',fontsize = labelsize)
+        ax1.set_xticks(10**x_labels)
+        ax1.set_xticklabels([r'$10^{%i}$' %x if int(x) > 1 else r'$%i$' %(10**x) for x in x_labels],fontsize = axissize)
     elif var_x == 'T_obs':
-        plt.xlabel(r'${\rm T_{obs}}$ $[yr]$',fontsize = labelsize)
-        plt.xticks(x_labels,[r'$%i$' %int(x) for x in x_labels/u.yr.to('s')],fontsize = axissize)
+        ax1.set_xlabel(r'${\rm T_{obs}}$ $[yr]$',fontsize = labelsize)
+        ax1.set_xticks(x_labels)
+        ax1.set_xticklabels([r'$%i$' %int(x) for x in x_labels/u.yr.to('s')],fontsize = axissize)
 
 
-    dists_min = -2
+    dists_min = -1
     dists_max = np.nanmax(np.ceil(np.log10(DL_array)))
-    print('dist max: ',np.ceil(np.log10(DL_array)))
-    dists = np.arange(dists_min,dists_max+1)
-    plt.ylim([10**dists_min,10**dists_max])
-    plt.yticks(10**dists,[r'$10^{%i}$' %dist if np.abs(int(dist)) > 1 else '{:g}'.format(10**dist) for dist in dists],fontsize = axissize)
-    plt.ylabel(r'$D_{L}$ [Mpc]',fontsize=labelsize)
+    dists_max = min(dists_max,np.log10(cosmo.luminosity_distance(1e3).value))
+    #print('dist max: ',np.ceil(np.log10(DL_array)))
+    dists = np.arange(dists_min,dists_max)
+    ax1.set_ylim([10**dists_min,10**dists_max])
+    ax1.set_yticks(10**dists)
+    ax1.set_yticklabels([r'$10^{%i}$' %dist if np.abs(int(dist)) > 1 else '{:g}'.format(10**dist) for dist in dists],fontsize = axissize)
+    ax1.set_ylabel(r'$D_{L}$ [Mpc]',fontsize=labelsize)
+
+    if z_axis:
+        z_min = -3.0
+        z_max = 3.0
+
+        zees = np.arange(z_min,z_max+1)
+        zticks = [cosmo.luminosity_distance(10**z).value for z in zees]
+        print(zticks)
+        #Set other side y-axis for lookback time scalings
+        ax2.set_ylim([10**dists_min,10**dists_max])
+        ax2.set_yticks(zticks)
+        ax2.set_yticklabels([r'$10^{%i}$' %dist if np.abs(int(dist)) > 1 else '{:g}'.format(10**dist) for dist in np.log10(zticks)],fontsize = axissize)
+        #ax2.set_yticklabels([r'$10^{%i}$' %z if np.abs(z) > 1 else '{:g}'.format(10**z) for z in zees],fontsize = axissize)
+        ax2.set_ylabel(r'Redshift',fontsize=labelsize)
 
     if display:
         plt.show()
