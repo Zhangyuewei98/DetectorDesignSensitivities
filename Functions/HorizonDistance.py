@@ -73,9 +73,6 @@ def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh):
                 if hasattr(source,'h_f'):
                     del source.h_f
                 rho_z[j] = snr.Calc_Chirp_SNR(source,instrument)
-            if rho_z[j] < 1.0:
-                rho_z[j] = error_number
-                error_number -= .01
 
         rho_interp = interp.InterpolatedUnivariateSpline(redshift_array,rho_z-rho_thresh)
         z_val = rho_interp.roots()
@@ -86,8 +83,8 @@ def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh):
                 new_redshift_array[i] = 1e-10 
         elif len(z_val) == 2:
             print('Multiple roots ','Mass: ',source.M,' z_vals: ',z_val)
-            print('Taking the largest redshift.')
-            new_redshift_array[i] = max(z_val)
+            print('Taking the smallest redshift.')
+            new_redshift_array[i] = min(z_val)
         else:
             new_redshift_array[i] = z_val[0]
         """
@@ -101,7 +98,7 @@ def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh):
         """
     DL_array = cosmo.luminosity_distance(new_redshift_array)
 
-    return [sample_x,DL_array,new_redshift_array]
+    return [sample_x,DL_array]
 
 def Get_Samples(source,instrument,var_x,sampleRate_x):
     ''' Takes in a object (either for the instrument or source), and the variables
@@ -168,22 +165,18 @@ def plotHD(source,instrument,var_x,sample_x,DL_array,display=True,figloc=None,z_
     #########################
     #Make the Contour Plots
     fig, ax1 = plt.subplots(figsize=figsize)
-    #Set other side y-axis for lookback time scalings
-    ax2 = ax1.twinx()
 
     #Set axis scales based on what data sampling we used 
     if xaxis_type == 'log':
         x_label_min = np.min(np.floor(np.log10(sample_x)))
         x_label_max = np.max(np.ceil(np.log10(sample_x)))
         ax1.loglog(sample_x,DL_array,color='b')
-        ax2.loglog(sample_x,DL_array,color='b')
         ax1.set_xlim([10**x_label_min,10**x_label_max])
         x_labels = np.arange(x_label_min,x_label_max+1)
     elif xaxis_type == 'lin':
         x_label_min = np.min(np.floor(sample_x))
         x_label_max = np.max(np.ceil(sample_x))
         ax1.semilogy(sample_x,DL_array,color='b')
-        ax2.semilogy(sample_x,DL_array,color='b')
         ax1.set_xlim([x_label_min,x_label_max])
         x_labels = np.linspace(x_label_min,x_label_max,x_label_max-x_label_min+1)
 
@@ -213,7 +206,7 @@ def plotHD(source,instrument,var_x,sample_x,DL_array,display=True,figloc=None,z_
         ax1.set_xticklabels([r'$%i$' %int(x) for x in x_labels/u.yr.to('s')],fontsize = axissize)
 
 
-    dists_min = -1
+    dists_min = 1
     dists_max = np.nanmax(np.ceil(np.log10(DL_array)))
     dists_max = min(dists_max,np.log10(cosmo.luminosity_distance(1e3).value))
     #print('dist max: ',np.ceil(np.log10(DL_array)))
@@ -224,18 +217,30 @@ def plotHD(source,instrument,var_x,sample_x,DL_array,display=True,figloc=None,z_
     ax1.set_ylabel(r'$D_{L}$ [Mpc]',fontsize=labelsize)
 
     if z_axis:
-        z_min = -3.0
-        z_max = 3.0
+        #Set other side y-axis for lookback time scalings
+        ax2 = ax1.twinx()
+        if xaxis_type == 'log':
+            ax2.loglog(sample_x,DL_array,color='b',linestyle='--')
+        elif xaxis_type == 'lin':
+            ax2.semilogy(sample_x,DL_array,color='b',linestyle='--')
+
+        z_min = z_at_value(cosmo.luminosity_distance,(10**dists_min)*u.Mpc)
+        z_min = np.ceil(np.log10(z_min))
+        if dists_max > 7.0:
+            z_max = 3.0
+        else:
+            z_max = z_at_value(cosmo.luminosity_distance,(10**dists_max)*u.Mpc)
+            z_max = np.floor(np.log10(z_max))
 
         zees = np.arange(z_min,z_max+1)
         zticks = [cosmo.luminosity_distance(10**z).value for z in zees]
-        print(zticks)
         #Set other side y-axis for lookback time scalings
         ax2.set_ylim([10**dists_min,10**dists_max])
         ax2.set_yticks(zticks)
-        ax2.set_yticklabels([r'$10^{%i}$' %dist if np.abs(int(dist)) > 1 else '{:g}'.format(10**dist) for dist in np.log10(zticks)],fontsize = axissize)
-        #ax2.set_yticklabels([r'$10^{%i}$' %z if np.abs(z) > 1 else '{:g}'.format(10**z) for z in zees],fontsize = axissize)
+        #ax2.set_yticklabels([r'$10^{%i}$' %dist if np.abs(int(dist)) > 1 else '{:g}'.format(10**dist) for dist in np.log10(zticks)],fontsize = axissize)
+        ax2.set_yticklabels([r'$10^{%i}$' %z if np.abs(z) > 1 else '{:g}'.format(10**z) for z in zees],fontsize = axissize)
         ax2.set_ylabel(r'Redshift',fontsize=labelsize)
+        ax2.minorticks_off()
 
     if display:
         plt.show()
