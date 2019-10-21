@@ -26,14 +26,17 @@ def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh):
             iteratively converge to correct luminosity distance values.
         Returns the variable ranges used to calculate the horizon distance for each matrix and the horizon distance
     '''
-    redshift_array = np.logspace(-2,6,200)
+    redshift_array = np.logspace(-2,6,100)
 
     source.instrument = instrument
     #Get Samples for variable
     [sample_x,recalculate_strain,recalculate_noise] = Get_Samples(source,instrument,var_x,sampleRate_x)
 
     sampleSize_x = len(sample_x)
-    new_redshift_array_min = np.zeros(sampleSize_x)
+    new_redshift_array_min = []
+    sample_x_min = []
+    new_redshift_array_mid = []
+    sample_x_mid = []
     new_redshift_array_max = np.zeros(sampleSize_x)
     rho_z = np.zeros(len(redshift_array))
     
@@ -52,7 +55,6 @@ def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh):
             #Update Attribute (also updates dictionary)
             setattr(source,var_x,sample_x[i])
 
-        error_number = 1.0
         for j,z in enumerate(redshift_array):
             #Update particular source's redshift
             setattr(source,'z',z)
@@ -77,22 +79,28 @@ def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh):
 
         rho_interp = interp.InterpolatedUnivariateSpline(redshift_array,rho_z-rho_thresh)
         z_val = rho_interp.roots()
+        #print(z_val)
         if len(z_val) == 0:
             if min(rho_z) > rho_thresh:
-                new_redshift_array_min[i] = 1e10
                 new_redshift_array_max[i] = 1e10
             else:
-                new_redshift_array_min[i] = 1e-10 
                 new_redshift_array_max[i] = 1e-10
         elif len(z_val) == 2:
-            print('Multiple roots ','Mass: ',source.M,' z_vals: ',z_val)
-            #print('Taking the smallest redshift.')
-            print('')
-            new_redshift_array_min[i] = min(z_val)
-            new_redshift_array_max[i] = max(z_val)
+            #print('Multiple roots ','Mass: ',source.M,' z_vals: ',z_val)
+            #print('')
+            new_redshift_array_mid.append(z_val[0])
+            sample_x_mid.append(sample_x[i])
+            new_redshift_array_max[i] = z_val[1]
+        elif len(z_val) == 3:
+            #print('Multiple roots ','Mass: ',source.M,' z_vals: ',z_val)
+            #print('')
+            new_redshift_array_min.append(z_val[0])
+            sample_x_min.append(sample_x[i])
+            new_redshift_array_mid.append(z_val[1])
+            sample_x_mid.append(sample_x[i])
+            new_redshift_array_max[i] = z_val[2]
         else:
-            new_redshift_array_min[i] = z_val[0]
-            new_redshift_array_max[i] = new_redshift_array_min[i]
+            new_redshift_array_max[i] = z_val[0]
 
         """
         plt.figure()
@@ -103,11 +111,13 @@ def getHorizonDistance(source,instrument,var_x,sampleRate_x,rho_thresh):
         plt.xscale('log')
         plt.show()
         """
+        
 
     DL_array_min = cosmo.luminosity_distance(new_redshift_array_min)
+    DL_array_mid = cosmo.luminosity_distance(new_redshift_array_mid)
     DL_array_max = cosmo.luminosity_distance(new_redshift_array_max)
 
-    return [sample_x,DL_array_min,DL_array_max]
+    return [sample_x,DL_array_max,sample_x_min,DL_array_min,sample_x_mid,DL_array_mid]
 
 def Get_Samples(source,instrument,var_x,sampleRate_x):
     ''' Takes in a object (either for the instrument or source), and the variables
@@ -148,7 +158,7 @@ def Get_Samples(source,instrument,var_x,sampleRate_x):
     return sample_x,recalculate_strain,recalculate_noise
 
 
-def plotHD(source,instrument,var_x,sample_x,DL_array,DL_min=None,display=True,figloc=None,z_axis=False):
+def plotHD(source,instrument,var_x,sample_x,DL_array,DL_mid=None,DL_min=None,display=True,figloc=None,z_axis=False):
     '''Plots the DL curves from calcHorizonDistance'''
 
     axissize = 16
@@ -228,20 +238,28 @@ def plotHD(source,instrument,var_x,sample_x,DL_array,DL_min=None,display=True,fi
     ax1.set_yticklabels([r'$10^{%i}$' %dist if np.abs(int(dist)) > 1 else '{:g}'.format(10**dist) for dist in dists],fontsize = axissize)
     ax1.set_ylabel(r'$D_{L}$ [Mpc]',fontsize=labelsize)
 
-    if isinstance(DL_min,np.ndarray):
+    if isinstance(DL_min,list):
         #Set other side y-axis for lookback time scalings
         ax2 = ax1.twinx()
         if xaxis_type == 'log':
-            ax2.loglog(sample_x,DL_min,color='b',linestyle='--')
+            ax2.loglog(DL_min[0],DL_min[1],color='b')
         elif xaxis_type == 'lin':
-            ax2.semilogy(sample_x,DL_min,color='b',linestyle='--')
+            ax2.semilogy(DL_min[0],DL_min[1],color='b')
         ax2.set_ylim([10**dists_min,10**dists_max])
 
-        ax2.fill_between(sample_x,DL_min,DL_array)
+    if isinstance(DL_min,list) and isinstance(DL_mid,list):
+        if xaxis_type == 'log':
+            ax2.loglog(DL_mid[0],DL_mid[1],color='b')
+        elif xaxis_type == 'lin':
+            ax2.semilogy(DL_mid[0],DL_mid[1],color='b')
+
+        indx_min = np.abs(DL_mid[0]-DL_min[0][0]).argmin()
+        indx_max = np.abs(DL_mid[0]-DL_min[0][-1]).argmin()+1
+        ax2.fill_between(DL_min[0],DL_min[1],DL_mid[1][indx_min:indx_max])
 
     if z_axis:
         #Set other side y-axis for lookback time scalings
-        if not isinstance(DL_min,np.ndarray):
+        if not isinstance(DL_min,list):
             ax2 = ax1.twinx()
             if xaxis_type == 'log':
                 ax2.loglog(sample_x,DL_array,color='b',linestyle='--')
@@ -251,8 +269,8 @@ def plotHD(source,instrument,var_x,sample_x,DL_array,DL_min=None,display=True,fi
 
         z_min = z_at_value(cosmo.luminosity_distance,(10**dists_min)*u.Mpc)
         z_min = np.ceil(np.log10(z_min))
-        if dists_max > 8.0:
-            z_max = 4.0
+        if dists_max > 9.0:
+            z_max = 5.0
         else:
             z_max = z_at_value(cosmo.luminosity_distance,(10**dists_max)*u.Mpc)
             z_max = np.floor(np.log10(z_max))
