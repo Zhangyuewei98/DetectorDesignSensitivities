@@ -927,7 +927,6 @@ class TimeDomain:
         diff_filelocation = top_directory + '/LoadFiles/DiffStrain/EOBdiff/' + diff_filename
         self._diff_data = np.loadtxt(diff_filelocation)
 
-
     def Get_hf_from_hcross_hplus(self,interp_res='coarse',windowing='left'):
         '''Converts dimensionless, time domain strain to frequency space'''
 
