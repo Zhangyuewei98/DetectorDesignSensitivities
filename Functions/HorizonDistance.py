@@ -177,7 +177,6 @@ def plotHD(source,instrument,var_x,sample_x,DL_array,DL_mid=None,DL_min=None,dis
 
     if isinstance(DL_min,u.Quantity):
         DL_min = DL_min.value
-
     #Set whether log or linearly spaced axes
     if var_x == 'q' or var_x == 'chi1' or var_x == 'chi2':
         xaxis_type = 'lin'
