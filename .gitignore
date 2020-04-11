@@ -50,4 +50,4 @@ ehthumbs.db
 Thumbs.db
 
 # Get rid of txt SNR files
-saved_SNRs/
+notebook_examples/saved_SNRs/
