@@ -48,3 +48,6 @@ __pycache__
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Get rid of txt SNR files
+saved_SNRs/
