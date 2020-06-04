@@ -86,7 +86,6 @@ def Plot_SNR(var_x,sample_x,var_y,sample_y,SNRMatrix,
     if 'linewidths' not in contour_kwargs.keys():
         contour_kwargs['linewidths'] = 2.0
 
-    print(contour_kwargs['linewidths'])
 
     if 'cmap' not in contourf_kwargs.keys():
         contourf_kwargs['cmap'] = 'viridis'
